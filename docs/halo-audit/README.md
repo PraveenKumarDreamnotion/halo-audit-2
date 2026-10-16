@@ -104,6 +104,99 @@ should be updated.
    date. The tool page says "no signup", but the findings now need an email.
    The comparison page mentions 8 categories, but 2.x has 4 groups.
 
+## Release checklist
+
+These are the five open items from
+[issue #1](https://github.com/PraveenKumarDreamnotion/halo-audit-2/issues/1).
+An item is ticked only when its acceptance criteria are met. Passing tests do
+not count for items that depend on a real Brevo account or a real server.
+Last reviewed 2026-10-16.
+
+| # | Item | Status | Owner |
+|---|---|---|---|
+| 1 | Brevo `FORM_NAME` stored by a real Brevo account | Not verified | Release owner (approves a real Brevo check) |
+| 2 | Competitor comparison (scope expansion) | Needs owner approval | Sandeep |
+| 3 | Security hotfix running on production | Not verified | Whoever can access production |
+| 4 | Legacy Google service-account key | Needs owner approval | Key owner |
+| 5 | Live Brevo settings on the local DevKinsta site | Verified as present; the fix needs owner approval | Release owner |
+
+**1. Brevo `FORM_NAME`: not verified.**
+
+- **Evidence:**
+  - `BrevoSync` reads every attribute back after writing it. It records each
+    contact as `saved`, `partial` or `rejected`, lists the attributes Brevo did
+    not keep, and records `form_page_status` (`ok`, `missing` or `invalid`).
+  - `BrevoAttributesTest` and `BrevoSyncTest` cover this against mocked Brevo
+    answers only.
+  - On the local DevKinsta site (read-only check, 2026-10-16):
+    - no contact has been synced by 2.0.1;
+    - no failure or attribute notice is stored;
+    - the newest stored report is from 2.0.0.
+
+  So no local record explains the problem reported after a live submission.
+  Whether the Brevo account defines `FORM_NAME`, and with which type, has not
+  been checked.
+- **Done when:**
+  - The account's contact attributes include `NAME`, `KEYWORD`, `URL`,
+    `COMPETITOR_URL` and `FORM_NAME`, with text types.
+  - One approved, controlled submission on a non-production site produces all
+    three of these:
+    - a "synced" status with nothing listed as missing;
+    - a `form_page_status` of `ok`;
+    - in Brevo, a contact whose `FORM_NAME` is the page the form was on.
+- **Needs:** approval for a real Brevo request. This review made none.
+
+**2. Competitor comparison: needs owner approval.**
+
+- **Evidence:**
+  - 2.0.0 removed the comparison on purpose (`DESIGN.md`, Removed).
+  - 2.0.1 brings it back with `comparison="true"`. The behaviour is set out in
+    `DESIGN.md`, "Competitor comparison":
+    - both pages use the same checks;
+    - a comparison counts as 2 towards each rate limit;
+    - if either page cannot be read, nothing is stored;
+    - the results go in the existing `competitor_*` columns.
+  - `CompareTest` and `CompareFindingsSpeedTest` pass. `DESIGN.md` marks it
+    "pending Sandeep's review".
+- **Done when:** Sandeep approves keeping it in 2.0.1, or asks for it to be
+  taken out. Either way, the decision is recorded in `DESIGN.md`.
+
+**3. Security hotfix on production: not verified.**
+
+- **Evidence:** the Task 2 hotfix was merged in the original repository
+  (`dc8ec62`, 2026-10-13). Nobody has checked which version production runs,
+  and this review did not access production.
+- **Done when:** someone with production access confirms that the live plugin
+  is the hotfix or 2.0.1. For example, a logged-out request to
+  `/wp-admin/admin-ajax.php?page=seo-analyzer-reports&action=view&id=1` must
+  not show a report.
+
+**4. Google service-account key: needs owner approval.**
+
+- **Evidence:**
+  - The retired NLP add-on folder still holds one service-account JSON file on
+    the local DevKinsta site. The add-on is inactive, and there is no
+    `.htaccess` in that folder.
+  - Staging and production were not checked.
+  - The key was never committed to either repository. The file name does
+    appear in the public history of the original repository, in the add-on's
+    code.
+- **Done when:**
+  1. The key owner revokes or rotates the key and reviews its use for
+     anything unexpected.
+  2. The add-on folder, with its JSON file, is deleted from every site.
+
+**5. Live Brevo settings on DevKinsta: verified as present.**
+
+- **Evidence:** the same read-only check found a Brevo list ID of `14` and a
+  saved key that looks like a live key. With both set, every confirmed email
+  on that site writes a real contact. Do not submit test forms there.
+- **Done when:** the release owner either clears the list ID on DevKinsta or
+  swaps in a test key and list, and the change is recorded here.
+
+Issue #1 stays open until all five items are done and the release owner
+approves closing it.
+
 ## Decisions
 
 Sandeep made these on 2026-10-09 (`DESIGN.md` section 1):

@@ -90,7 +90,7 @@ The script builds from the last commit, not from uncommitted files. It installs 
 
 ## Known limits
 
-Full detail is in [issue #1](https://github.com/PraveenKumarDreamnotion/halo-audit-2/issues/1).
+Full detail is in [issue #1](https://github.com/PraveenKumarDreamnotion/halo-audit-2/issues/1). The release checklist, with the status and evidence for each item, is in [`docs/halo-audit/README.md`](docs/halo-audit/README.md#release-checklist).
 
 - **Brevo `FORM_NAME` has only been checked against mocked Brevo responses.** Passing tests don't show that a real Brevo account stores the attribute.
 - **Competitor comparison and the Brevo list sync expand the original 2.0 scope.** Both are pending review (see `docs/halo-audit/DESIGN.md`).
@@ -99,4 +99,4 @@ Full detail is in [issue #1](https://github.com/PraveenKumarDreamnotion/halo-aud
 
 ## Licence
 
-The plugin header declares **GPLv2 or later** (`SEO-plugin/README.txt`, `SEO-plugin/composer.json`). The repository has no separate LICENSE file. Third-party packages installed by Composer carry their own licences.
+The plugin is licensed under the **GNU General Public License, version 2 or (at your option) any later version**, as its header declares (`SEO-plugin/README.txt`, `SEO-plugin/composer.json`). The full text of version 2 is in [`LICENSE`](LICENSE). Third-party packages installed by Composer carry their own licences.
