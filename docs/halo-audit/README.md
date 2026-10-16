@@ -1,129 +1,112 @@
-# Halo Audit 2.0: start here
+# Halo Audit 2: design and delivery notes
 
-This folder holds the design and the build plan for the next version of the
-SEO Analyzer plugin. Nothing in `SEO-plugin/` has changed yet. This is a plan
-to review and then build.
+This folder holds the design, the original build plan and the acceptance
+records for Halo Audit 2. The plugin itself is in `SEO-plugin/`. To install
+or test it, start with the repository's top-level `README.md` and
+`SEO-plugin/README.txt`.
 
-| File | What it is | Read it when |
+**Where things stand:** version 2.0.1 is built and tested locally. It is not
+released or deployed. Open review items are in
+[issue #1](https://github.com/PraveenKumarDreamnotion/halo-audit-2/issues/1).
+
+| File | What it is | Status |
 |---|---|---|
-| `README.md` | This page. The short version. | First |
-| `DESIGN.md` | What we are building and why. 325 lines. | Before you review |
-| `PLAN.md` | How to build it, step by step, with all the code and tests. 22 tasks. | While you build |
+| `README.md` | This page. | Current |
+| `DESIGN.md` | What the plugin does and why: checks, thresholds, scoring, data, security. | Current. Notes added after 2.0.1 are marked "pending review" |
+| `ACCEPTANCE.md` | What was tested, where, and what was not. | Current, up to 2.0.1 |
+| `THEME-INTEGRATION.md`, `theme-integration.patch` | An optional patch for one site's theme (GeneratePress child). The plugin does not need it. | Optional |
+| `PLAN.md` | The original 22-task build plan, with code and tests for each task. | History. The build is done, and the code has moved on since |
 
-## Do this first: the security patch
+## What the plugin does
 
-**Task 2 in `PLAN.md` is urgent. Please ship it before anything else.**
+A visitor enters a page address and a keyword. The plugin scores the page in
+four groups:
 
-The current plugin has holes. The worst one lets a logged-out visitor read a
-lead's name and email from the reports screen. `DESIGN.md` section 7 lists all
-of them. This repo is public, so that list is public too.
-
-Task 2 is small: edits in 5 files, mostly deletions, no new dependencies. It:
-
-- adds a login check and a nonce to the admin report actions;
-- removes the open test-mail endpoint and four open "save competitor" endpoints;
-- removes a database clean-up that runs on every admin page load;
-- removes log lines that write codes, keys and lead data.
-
-To ship it without the rest:
-
-1. `git checkout -b security-hotfix main`
-2. Do Task 2, Steps 3, 4 and 5 (the code edits). The tests in Steps 1, 2 and 6
-   need the Task 1 test harness; skip them for the hotfix and check by hand.
-3. Check by hand: open
-   `/wp-admin/admin-ajax.php?page=seo-analyzer-reports&action=view&id=1` in a
-   private window. It must not show a report.
-4. Open a pull request, merge, deploy to production.
-
-## Why we are rebuilding
-
-The tool at `/ai-tools/seo-analysis/` is sold as a sample of Halo. Today it
-does not match Halo:
-
-- Several checks are wrong. "Heading Structure" can never fail. The AI-crawler
-  check scores 0 for a normal `robots.txt` that has no `User-agent: *` line.
-- Three checks are counted twice, which bends the score.
-- A failed fetch can read as a bad score.
-- The email gate is in the browser only. The full results are already in the
-  page source before the visitor gives an email.
-- One 2,400-line class does everything, so nothing can be tested.
-
-## What changes for a visitor
-
-| Today | After |
+| Group | Weight |
 |---|---|
-| One score, eight tier labels | One score, grade A to F |
-| 9 loosely defined categories | 4 groups: On-page 30%, Technical 20%, AI readiness 30%, Speed 20% |
-| About 20 checks, several duplicated | 33 scored checks, plus 4 extra checks for schools, colleges and universities |
-| A check that cannot run scores 0 or 50 | It shows "Not measured" and is left out of the score |
-| Waits up to 90 seconds for PageSpeed | First result in under 15 seconds. Speed fills in after |
-| Gate in the browser | Score and grade are free. Findings and PDF need a confirmed email, enforced on the server |
-| Competitor comparison | Removed for now |
-| OpenAI and NLP add-ons | Removed. Every check has its own fixed advice text |
+| On-page SEO for the keyword | 30% |
+| Technical | 20% |
+| AI readiness | 30% |
+| Speed | 20% |
 
-The check rules come from the Halo platform and from our university research
-pipeline. `DESIGN.md` section 2 names each source. Section 3.2 has every
-threshold in one table.
+- **Checks:** 33 scored checks, plus 4 unscored checks for schools, colleges
+  and universities.
+- **Free and gated:** the score and an A to F grade are free. The findings and
+  the PDF need a name and an email confirmed with a code. The server enforces
+  this.
+- **Unmeasured checks:** a check that cannot run shows "Not measured". The
+  score is worked out from the checks that ran.
+- **Speed:** uses the Google PageSpeed API when a key is saved. It is scored
+  from the PageSpeed score, LCP and CLS.
 
-## What changes in the code
+`DESIGN.md` section 2 names the source of each check rule, and section 3.2
+has every threshold.
 
-- **New engine** in `SEO-plugin/includes/engine/`. It has no WordPress calls,
-  so it runs under plain PHPUnit. One small class per check.
-- **WordPress layer** in `SEO-plugin/includes/engine/Wp/`: stored reports, the
-  email gate, rate limits, REST routes, PDF, shortcode, admin screens.
-- **REST, not admin-ajax.** Routes live under `/wp-json/halo-audit/v1/`.
-- **Same shortcode.** `[seo_analyzer]` keeps working. Old attributes are
-  accepted and ignored.
-- **Same leads table**, with new columns added by a migration. Old rows stay.
-- **Deleted:** the old public class, its JS and CSS, the old admin class, the
-  bundled TCPDF copy (it was never used; the plugin uses mPDF), both add-on
-  plugins, and other dead files.
+## What changed from 1.x
 
-`PLAN.md` has a file map near the top.
+| 1.x | 2.x |
+|---|---|
+| One 2,400-line class | An engine in `SEO-plugin/includes/engine/` with no WordPress calls (tested under plain PHPUnit), and a WordPress layer in `includes/engine/Wp/` |
+| admin-ajax handlers | REST routes under `/wp-json/halo-audit/v1/` |
+| Email gate in the browser; full results in the page source | Findings and the PDF are served only after the server confirms the email code |
+| 9 loosely defined categories, some checks counted twice | 4 groups, each check counted once |
+| OpenAI and NLP add-ons | Removed. Each check has fixed advice text |
+| TCPDF bundled but unused | mPDF only |
+| Competitor comparison | Removed in 2.0.0. Restored on the 2.x engine with `comparison="true"` (pending review) |
+| Brevo list push through the OpenAI add-on | Removed in 2.0.0. Replaced by an optional Brevo list sync after a confirmed email (pending review) |
 
-## What you need on your machine
+What stayed the same: the `[seo_analyzer]` shortcode and the leads table. Old
+rows are kept, and new columns are added by a migration that runs on the
+first page load. The PageSpeed key moves from its own table to the
+`halo_audit_psi_key` option.
 
-- PHP 8.0 or newer, and Composer.
-- Node and Docker Desktop, for the integration tests only (`@wordpress/env`).
-- The unit tests need neither Docker nor WordPress.
+## Security
 
-## How to build
+`DESIGN.md` section 7 lists the 1.x holes and how each one is closed.
 
-1. Read `DESIGN.md`. Comment on this pull request if you disagree with a
-   decision. It is cheaper to change the design now than the code later.
-2. Merge this pull request. It adds documents only.
-3. Ship the Task 2 hotfix (see above).
-4. `git checkout -b halo-audit-engine main`, then follow `PLAN.md` from Task 1.
-5. Each task is test first: write the test, see it fail, write the code, see
-   it pass, commit. The plan gives the exact code and the exact commands.
-6. Task 22 is the acceptance run and the pull request for the engine.
+**Task 2 hotfix.** The most urgent 1.x holes were patched first, on the 1.x
+code, as "Task 2" in `PLAN.md`. That hotfix is merged in the original
+repository, but it is not confirmed as deployed to production.
 
-Tasks 3 to 13 (the engine) do not touch the live plugin files, so they are
-safe to do in any week. The live behaviour changes at Task 14, when the new
-bootstrap replaces the old one. Tasks 14 to 21 should land together.
+**2.0.1 hardening:**
 
-The plan is written so that an AI coding agent can follow it task by task.
-A person can follow it the same way.
+- Page fetches refuse every private and special-purpose IPv4 and IPv6 range,
+  including IPv4-mapped, NAT64 and 6to4 forms.
+- Each fetch connects to the address that was checked (cURL only), and the
+  audit fails closed without cURL.
+- Each email-code attempt is counted atomically, and a code unlocks once.
+- Saved API keys are never written into the Settings page.
 
-## What changes at deploy time
+These notes describe the gaps that 2.0.0 had. Any site still running 2.0.0
+should be updated.
 
-1. Run `composer install --no-dev` in `SEO-plugin/`.
-2. The server needs PHP 8.0+ and WordPress 6.2+.
-3. The database migration runs by itself on the first page load.
-4. The PageSpeed key moves from its own table to an option. The migration
-   copies it. Please check it in Settings after the update.
-5. Deactivate and delete the two add-on plugins on the site.
-6. **Check the visitor IP.** Rate limits use `$_SERVER['REMOTE_ADDR']`. If
-   Kinsta puts a proxy address there, every visitor shares one limit. The plan
-   has a filter, `halo_audit_client_ip`, for that case. Task 22, Step 6 tells
-   you how to check.
-7. The page copy on `/ai-tools/seo-analysis/` says "no signup". That line
-   must change, because the full findings now need an email. Sandeep owns
-   that copy change.
+## Before deploying
 
-## Decisions already made
+1. Install from the built ZIP (see the top-level `README.md`). Do not run
+   Composer on the server. The server needs PHP 8.0+ with `curl`, `dom`,
+   `mbstring`, `openssl` and `gd`, and WordPress 6.2+.
+2. **Updating from 1.x: replace the files in place.** Never delete the 1.x
+   copy from the Plugins screen. Its uninstall drops the reports and leads
+   table. Export the leads first.
+3. Deactivate and delete the retired OpenAI and NLP add-ons. The NLP add-on
+   folder holds a Google service-account key. Its owner should deactivate the
+   add-on, then rotate the key, then delete the file, in that order.
+4. **Check the visitor IP.** Rate limits use `REMOTE_ADDR`. If the host's
+   proxy puts its own address there, every visitor shares one limit. Use the
+   `halo_audit_client_ip` filter in that case.
+5. Check the PageSpeed key in Settings after the migration.
+6. **Brevo list sync** is off until a list ID is saved. The five contact
+   attributes (NAME, KEYWORD, URL, COMPETITOR_URL, FORM_NAME) must exist in
+   Brevo. With a live key and a list ID saved, every confirmed email writes a
+   real contact, so do not submit test forms on such a site. FORM_NAME has
+   only been tested against mocked Brevo responses.
+7. Page copy on the site is not part of the plugin, and some of it is out of
+   date. The tool page says "no signup", but the findings now need an email.
+   The comparison page mentions 8 categories, but 2.x has 4 groups.
 
-Sandeep made these on 2026-10-09. They are recorded in `DESIGN.md` section 1.
+## Decisions
+
+Sandeep made these on 2026-10-09 (`DESIGN.md` section 1):
 
 | Question | Decision |
 |---|---|
@@ -132,40 +115,24 @@ Sandeep made these on 2026-10-09. They are recorded in `DESIGN.md` section 1.
 | Audience | Any site. Education sites get four extra checks |
 | Code approach | New engine inside the same plugin shell. Add-ons removed |
 
-## Where the plan departs from the design
+Made later by the developer, and **pending Sandeep's review**:
 
-Small points, all noted here so that they are not a surprise:
+- The 2.0.1 scoring rules (`DESIGN.md` sections 3.2 and 3.3).
+- The return of the competitor comparison.
+- The Brevo list sync (`DESIGN.md` section 4).
 
-- The integration tests use the WordPress test library that ships with
-  `@wordpress/env`, not the `wp-phpunit` Composer package. Same library,
-  fewer moving parts.
-- REST permission checks answer 403 with a message. WordPress would answer
-  401 to a logged-out visitor by default.
-- The crawler identifies itself as `HaloAudit/2.0` in a browser-style
-  user-agent. Some sites will block it. Those pages show "We could not read
-  this page" and get no score, which is the intended behaviour.
-
-## Things to decide during review
-
-1. **Kinsta and `REMOTE_ADDR`**: see deploy point 6. You know the hosting set-up.
-2. **Brevo list sync.** The old OpenAI add-on also pushed contacts to Brevo
-   lists 9 and 14. The new plugin stores leads in the table and exports CSV.
-   It does not push to a Brevo list. Tell Sandeep if the list push is in use.
-3. **Report retention.** Reports with no confirmed email are deleted after
-   7 days. Reports with a lead are kept. Say so if a different period is needed.
+Reports with no confirmed email are deleted after 7 days. Reports with a lead are kept.
 
 ## What comes after this
 
 This is part 1 of 3.
 
-- **Part 2:** a scan server that asks ChatGPT, Gemini and Google AI Overviews
-  about the visitor's organisation.
-- **Part 3:** the plugin calls that server. The slot for it is already in this
-  plan: the `ScanClient` interface, two empty settings fields, and a "Live AI
+- **Part 2:** a scan server that asks ChatGPT, Gemini and Google AI
+  Overviews about the visitor's organisation.
+- **Part 3:** the plugin calls that server. The slot is already there: the
+  `ScanClient` interface, two settings fields (not used yet) and a "Live AI
   visibility" section that says "Coming soon".
-
-Each part gets its own design and plan.
 
 ## Questions
 
-Ask Sandeep in `#thrivemattic`, or comment on the pull request.
+Ask Sandeep in `#thrivemattic`, or open an issue in this repository.
