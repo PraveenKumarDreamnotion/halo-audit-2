@@ -1,0 +1,2 @@
+# A unified diff needs its line endings and its one-space blank context lines kept as they are.
+theme-integration.patch -text whitespace=-blank-at-eol,-blank-at-eof

@@ -1,0 +1,136 @@
+diff --git a/wp-content/plugins/tm-blocks/assets/css/tm-blocks.css b/wp-content/plugins/tm-blocks/assets/css/tm-blocks.css
+index ef1bc70..7a43468 100644
+--- a/wp-content/plugins/tm-blocks/assets/css/tm-blocks.css
++++ b/wp-content/plugins/tm-blocks/assets/css/tm-blocks.css
+@@ -13864,6 +13864,39 @@ body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .tmsa-audit-col {
+ body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .tmsa-audit-col .seo-analyzer-form { display: none !important; }
+ body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .tmsa-audit-col p.tmsa-audit-sub { display: none !important; }
+ 
++/* -- Halo Audit 2.0 widget (.halo-audit, SEO Analyzer 2.0) inside the card.
++   The .seo-analyzer-* / .seo_analyzer_* rules above and in the REPORT + MODAL block
++   below only match the 1.x widget; they are kept so either plugin version works.
++   tm-seo-analysis.js sets .tmsa-running while the widget's report is on the page. -- */
++/* the card is the frame: drop the widget's own 880px cap and centring */
++body.tm-blocks-page.page-id-917 .tmsa-audit-col .halo-audit { max-width: none !important; margin: 0 !important; }
++/* h3.tmsa-audit-title above is the card heading; the widget's own h2 repeats it */
++body.tm-blocks-page.page-id-917 .tmsa-audit-col .halo-audit__title { display: none !important; }
++/* half-width card: stack the two fields and the button (the widget's 3-across form is sized for a full-width card) */
++body.tm-blocks-page.page-id-917 .tmsa-audit-panel:not(.tmsa-running) .tmsa-audit-col .halo-audit__form { grid-template-columns: 1fr !important; }
++body.tm-blocks-page.page-id-917 .tmsa-audit-col .halo-audit input {
++  padding: 13px 16px !important; font-family: var(--font-body) !important; font-size: 16px !important; color: var(--text-primary) !important;
++  background: var(--cream) !important; border: 1px solid var(--border-medium) !important; border-radius: var(--radius) !important;
++}
++body.tm-blocks-page.page-id-917 .tmsa-audit-col .halo-audit input:focus { border-color: var(--olive) !important; }
++body.tm-blocks-page.page-id-917 .tmsa-audit-col .halo-audit__button { border-radius: var(--radius) !important; font-family: var(--font-body) !important; }
++/* the theme's list indent does not belong on the group-score list */
++body.tm-blocks-page.page-id-917 main#main .tmsa-audit-col ul.halo-audit__groups { padding-left: 0 !important; margin-left: 0 !important; list-style: none !important; }
++/* report on the page: the card is full width, so lay the four group scores and the findings out across it */
++@media (min-width: 901px) {
++  body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .halo-audit__groups {
++    display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 16px !important; border-top: none !important;
++  }
++  body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .halo-audit__group {
++    padding: 16px 18px !important; background: var(--cream) !important; border: 1px solid var(--border-light) !important; border-radius: var(--radius) !important;
++  }
++}
++@media (min-width: 1200px) {
++  body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .halo-audit__findings { column-count: 2; column-gap: 48px; }
++  body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .halo-audit__section { break-inside: avoid-column; }
++  body.tm-blocks-page.page-id-917 .tmsa-audit-panel.tmsa-running .halo-audit__section:first-child { margin-top: 0 !important; }
++}
++
+ /* -- Report mock (raw SVG, in tm/content-html) -- */
+ body.tm-blocks-page.page-id-917 .tmsa-report-col { padding: 0 !important; }
+ body.tm-blocks-page.page-id-917 .tmsa-rm { background: var(--charcoal); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; margin: 0; }
+@@ -14419,6 +14452,39 @@ body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .tmca-audit-col {
+ body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .tmca-audit-col .seo-analyzer-form { display: none !important; }
+ body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .tmca-audit-col p.tmca-audit-sub { display: none !important; }
+ 
++/* -- Halo Audit 2.0 widget (.halo-audit, SEO Analyzer 2.0) inside the card.
++   The .seo-analyzer-* / .seo_analyzer_* rules above and in the REPORT + MODAL block
++   below only match the 1.x widget; they are kept so either plugin version works.
++   tm-competitor-analysis.js sets .tmca-running while the widget's report is on the page. -- */
++/* the card is the frame: drop the widget's own 880px cap and centring */
++body.tm-blocks-page.page-id-937 .tmca-audit-col .halo-audit { max-width: none !important; margin: 0 !important; }
++/* h3.tmca-audit-title above is the card heading; the widget's own h2 repeats it */
++body.tm-blocks-page.page-id-937 .tmca-audit-col .halo-audit__title { display: none !important; }
++/* half-width card: stack the two fields and the button (the widget's 3-across form is sized for a full-width card) */
++body.tm-blocks-page.page-id-937 .tmca-audit-panel:not(.tmca-running) .tmca-audit-col .halo-audit__form { grid-template-columns: 1fr !important; }
++body.tm-blocks-page.page-id-937 .tmca-audit-col .halo-audit input {
++  padding: 13px 16px !important; font-family: var(--font-body) !important; font-size: 16px !important; color: var(--text-primary) !important;
++  background: var(--cream) !important; border: 1px solid var(--border-medium) !important; border-radius: var(--radius) !important;
++}
++body.tm-blocks-page.page-id-937 .tmca-audit-col .halo-audit input:focus { border-color: var(--olive) !important; }
++body.tm-blocks-page.page-id-937 .tmca-audit-col .halo-audit__button { border-radius: var(--radius) !important; font-family: var(--font-body) !important; }
++/* the theme's list indent does not belong on the group-score list */
++body.tm-blocks-page.page-id-937 main#main .tmca-audit-col ul.halo-audit__groups { padding-left: 0 !important; margin-left: 0 !important; list-style: none !important; }
++/* report on the page: the card is full width, so lay the four group scores and the findings out across it */
++@media (min-width: 901px) {
++  body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .halo-audit__groups {
++    display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 16px !important; border-top: none !important;
++  }
++  body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .halo-audit__group {
++    padding: 16px 18px !important; background: var(--cream) !important; border: 1px solid var(--border-light) !important; border-radius: var(--radius) !important;
++  }
++}
++@media (min-width: 1200px) {
++  body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .halo-audit__findings { column-count: 2; column-gap: 48px; }
++  body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .halo-audit__section { break-inside: avoid-column; }
++  body.tm-blocks-page.page-id-937 .tmca-audit-panel.tmca-running .halo-audit__section:first-child { margin-top: 0 !important; }
++}
++
+ /* -- Report mock (raw SVG, in tm/content-html) — two-ring you-vs-them -- */
+ body.tm-blocks-page.page-id-937 .tmca-report-col { padding: 0 !important; }
+ body.tm-blocks-page.page-id-937 .tmca-rm { background: var(--charcoal); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; margin: 0; }
+diff --git a/wp-content/themes/generatepress_child/assets/js/tm-competitor-analysis.js b/wp-content/themes/generatepress_child/assets/js/tm-competitor-analysis.js
+index 5420bed..6104caf 100644
+--- a/wp-content/themes/generatepress_child/assets/js/tm-competitor-analysis.js
++++ b/wp-content/themes/generatepress_child/assets/js/tm-competitor-analysis.js
+@@ -51,6 +51,21 @@
+   (function auditToggle() {
+     var panel = document.querySelector('.tmca-audit-panel');
+     if (!panel) { return; }
++
++    /* SEO Analyzer 2.0 (.halo-audit widget): the plugin un-hides
++       .halo-audit__results once a report is on the page and hides it again
++       when another audit starts. A failed or refused audit never un-hides it.
++       Mirror that one attribute, so the panel is full-width exactly while a
++       report is showing. No submit listener: the plugin owns the form. */
++    var results = panel.querySelector('.halo-audit__results');
++    if (results) {
++      var sync = function () { panel.classList.toggle('tmca-running', !results.hidden); };
++      new MutationObserver(sync).observe(results, { attributes: true, attributeFilter: ['hidden'] });
++      sync();
++      return;
++    }
++
++    /* SEO Analyzer 1.x widget (kept so the theme works with either version). */
+     var loading = panel.querySelector('.seo-analyzer-loading');
+     if (!loading) { return; }
+ 
+diff --git a/wp-content/themes/generatepress_child/assets/js/tm-seo-analysis.js b/wp-content/themes/generatepress_child/assets/js/tm-seo-analysis.js
+index a3141c2..21b82ea 100644
+--- a/wp-content/themes/generatepress_child/assets/js/tm-seo-analysis.js
++++ b/wp-content/themes/generatepress_child/assets/js/tm-seo-analysis.js
+@@ -50,6 +50,21 @@
+   (function auditToggle() {
+     var panel = document.querySelector('.tmsa-audit-panel');
+     if (!panel) { return; }
++
++    /* SEO Analyzer 2.0 (.halo-audit widget): the plugin un-hides
++       .halo-audit__results once a report is on the page and hides it again
++       when another audit starts. A failed or refused audit never un-hides it.
++       Mirror that one attribute, so the panel is full-width exactly while a
++       report is showing. No submit listener: the plugin owns the form. */
++    var results = panel.querySelector('.halo-audit__results');
++    if (results) {
++      var sync = function () { panel.classList.toggle('tmsa-running', !results.hidden); };
++      new MutationObserver(sync).observe(results, { attributes: true, attributeFilter: ['hidden'] });
++      sync();
++      return;
++    }
++
++    /* SEO Analyzer 1.x widget (kept so the theme works with either version). */
+     var loading = panel.querySelector('.seo-analyzer-loading');
+     if (!loading) { return; }
+ 

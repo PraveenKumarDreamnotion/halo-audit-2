@@ -1,0 +1,12 @@
+# Left out of the plugin ZIP (bin/build-zip.sh uses git archive).
+/tests export-ignore
+/bin export-ignore
+/phpunit.xml.dist export-ignore
+/phpunit.integration.xml export-ignore
+/.wp-env.json export-ignore
+/package.json export-ignore
+/package-lock.json export-ignore
+/.gitattributes export-ignore
+
+# Shell scripts must keep Unix line endings on every machine.
+/bin/*.sh text eol=lf
