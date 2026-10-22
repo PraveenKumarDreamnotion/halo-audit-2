@@ -38,7 +38,8 @@ final class Shortcode
         // popup and nlp are accepted so that existing pages do not break. They do nothing.
         // comparison="true" adds the competitor page field, as in 1.x; competitor="false" turns that off.
         $atts = shortcode_atts(
-            ['title' => self::DEFAULT_NAME, 'heading_level' => '2', 'align' => '', 'popup' => '', 'comparison' => '', 'nlp' => '', 'competitor' => ''],
+            ['title' => self::DEFAULT_NAME, 'heading_level' => '2', 'align' => '', 'popup' => '', 'comparison' => '', 'nlp' => '', 'competitor' => '',
+                'cta_url' => '', 'cta_title' => '', 'cta_text' => '', 'cta_button' => ''],
             $atts,
             'seo_analyzer'
         );
@@ -54,6 +55,17 @@ final class Shortcode
         $compare = self::compareMode($atts);
         // The page this form is on, signed (FORM_NAME in Brevo). Each placement gets the page it is shown on.
         $pageUrl = self::currentPageUrl();
+        // An optional closing block under the findings: the site's own offer (cta_url, cta_title, cta_text, cta_button).
+        // Without cta_url there is no block. The plugin itself names no site.
+        $cta = '';
+        $ctaUrl = esc_url((string) $atts['cta_url'], ['http', 'https']);
+        if ($ctaUrl !== '') {
+            $cta = ' data-cta-url="' . esc_attr($ctaUrl) . '"';
+            foreach (['cta_title' => 'data-cta-title', 'cta_text' => 'data-cta-text', 'cta_button' => 'data-cta-button'] as $key => $attr) {
+                $value = trim((string) $atts[$key]);
+                $cta .= $value !== '' ? ' ' . $attr . '="' . esc_attr($value) . '"' : '';
+            }
+        }
 
         self::registerAssets();
         wp_enqueue_style(self::HANDLE);
@@ -66,7 +78,7 @@ final class Shortcode
 
         ob_start();
         ?>
-        <section class="<?php echo esc_attr($class); ?>" id="<?php echo esc_attr($id); ?>" data-state="idle" data-heading-level="<?php echo esc_attr((string) $level); ?>"<?php echo $pageUrl !== '' ? ' data-form-page="' . esc_attr(self::pageToken($pageUrl)) . '"' : ''; ?><?php echo $compare ? ' data-compare="1"' : ''; ?> <?php echo $name; // phpcs:ignore WordPress.Security.EscapeOutput -- built from escaped parts ?>>
+        <section class="<?php echo esc_attr($class); ?>" id="<?php echo esc_attr($id); ?>" data-state="idle" data-heading-level="<?php echo esc_attr((string) $level); ?>"<?php echo $pageUrl !== '' ? ' data-form-page="' . esc_attr(self::pageToken($pageUrl)) . '"' : ''; ?><?php echo $compare ? ' data-compare="1"' : ''; ?><?php echo $cta; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above ?> <?php echo $name; // phpcs:ignore WordPress.Security.EscapeOutput -- built from escaped parts ?>>
             <?php if ($title !== '') : ?>
             <h<?php echo (int) $level; ?> class="halo-audit__title" id="<?php echo esc_attr($id); ?>-title"><?php echo esc_html($title); ?></h<?php echo (int) $level; ?>>
             <?php endif; ?>

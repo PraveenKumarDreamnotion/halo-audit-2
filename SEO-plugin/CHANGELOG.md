@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed (results design review, 22 Oct 2026)
+- Area cards: the name on its own line, the score in large figures with a score bar, and only the counts that are not zero ("5 to fix · 1 to improve · 6 pass").
+- Speed while the test runs: "Testing…" and "Takes up to 90 seconds", with no counts. The status line says "Page read. The speed test is still running." until it ends, then "Audit complete."
+- The Speed area is named "Speed (mobile)". The keyword is shown beside the page address.
+- Findings: "Fix these first" lists the top 5 Fix and Improve results, ranked by severity and area weight. In each area the checks needing work come first (Fix, Improve, Not measured), each with a "What to do" row; passed checks are folded under "N checks passed". Single column at every width.
+- Status badges, colours and type follow the PDF: dark text on a light tint, olive accent `#808000`, charcoal ink, Oswald (`--halo-display`) for scores and headings. "Download PDF" is a charcoal outline button.
+- New shortcode attributes `cta_url`, `cta_title`, `cta_text` and `cta_button` add an optional closing block under the findings. Without `cta_url` there is no block.
+
 ### Added
 - Competitor comparison is back, built on the 2.x engine. With `comparison="true"` on the shortcode (as in 1.x) the form asks for your page, a competitor page and a keyword. Both pages are audited by the same checks and scoring; the report shows both overall scores, a side-by-side table of the four areas with the difference, and the competitor's result next to each of your findings. The PDF carries the same comparison. `competitor="false"` keeps it off; `competitor="true"` alone does nothing (as in 1.x).
 - The competitor's report is stored in the `competitor_url`, `competitor_results` and `competitor_overall_score` columns that the table already had. No schema change.
