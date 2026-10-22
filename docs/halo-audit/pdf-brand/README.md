@@ -14,8 +14,24 @@ engine the plugin already uses (mPDF 8). No other PDF library is needed.
 | `../../../SEO-plugin/assets/images/` | The thrivemattic logo, dark and white, cropped from `tm-brand/thrivemattic-logos/` |
 
 This branch adds files only. It does not change `Pdf.php`, `halo-audit.js` or any other
-existing file, because the newest PDF code (the 19 and 20 October changes) is on staging and
-not in git. Apply the steps below to that newest code.
+existing file. It sits on top of commit `8be9ba9` (Halo Audit 2.0.1, the PDF redesign).
+
+## Where to change the 2.0.1 code (commit `8be9ba9`)
+
+| What | Where now | Change to |
+|---|---|---|
+| Font | `Pdf.php` `engine()`: `'default_font' => 'dejavusanscondensed'`, and `css()`: `body{font-family:dejavusanscondensed}` | Merge `BrandPdf::config()` into the options (step 1). Body `lato`, `h1`, `h2`, score numbers `oswald` / `oswaldbold`. SVG ring text: `font-family="oswaldbold"` |
+| Devanagari | `PdfFonts` (FreeSans for `lang="hi"`) | Keep it. Add `+ PdfFonts::fontdata()` to the `fontdata` from `BrandPdf::config()`, and keep `autoLangToFont` and `languageToFont` |
+| Colours | `Pdf.php` `ACCENT #5c6b2f`, `INK #1f2421`; `css()` `pass #2a6f2e`, `warn #8a5200`, `fail #b3261e` | `BrandPdf::OLIVE`, `BrandPdf::CHARCOAL`, and `BrandPdf::STATUS` for the chips |
+| Olive text | `css()`: `.eyebrow`, `.brand`, `.box-title`, `h3`, `.t-n` use `accent` as text colour | Charcoal or `#777` text. Keep olive for rules, bars and rings only |
+| Logo | None. `runningHeader()` prints "HALO AUDIT" as text | The logo as an image. **Use a `data:image/png;base64,...` URI**, because `engine()` refuses every file and URL. Read `assets/images/logo-dark.png` / `logo-white.png` with `file_get_contents` and encode it. Fonts are not affected by the lock |
+| Cover | `hero()`: light card | Charcoal band with the white logo (see `reference.pdf` page 1). Use inline styles inside it |
+| Call to action | None | `BrandPdf::cta('thrivemattic.com/contact')` as the last block of `parts()` details |
+| File name | `Pdf::FILENAME = 'halo-audit.pdf'`, `RestController::pdf()` sends it, `halo-audit.js` line 599 hard-codes it, `PdfTest::test_filename_is_always_halo_audit_pdf` asserts it | `Pdf::filename($report)` builds the name (step 4). `RestController` sends `Pdf::filename($row['report'])`. JS reads `Content-Disposition`. Update the test |
+
+The file name: the 2.0.1 comment says the name "says nothing about the audited page". The host
+of the audited page is not private: the visitor typed it. Sandeep asked for a specific name on
+17 Oct so that downloads do not pile up as `halo-audit (7).pdf`.
 
 ## What the review found
 
