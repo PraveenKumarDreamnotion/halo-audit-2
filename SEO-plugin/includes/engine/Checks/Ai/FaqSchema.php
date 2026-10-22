@@ -29,6 +29,7 @@ final class FaqSchema extends BaseCheck
                 return Result::warn('An FAQ heading and no FAQPage schema');
             }
         }
-        return Result::pass('No FAQ section on this page');
+        // Still a pass, as before: with no FAQ content there is nothing to mark up. The words now say why.
+        return Result::pass('No FAQ content on this page, so no FAQ schema is needed');
     }
 }

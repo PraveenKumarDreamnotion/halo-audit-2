@@ -82,6 +82,23 @@ final class ReportStore
         $wpdb->update(Installer::resultsTable(), self::columns($report), ['report_key' => $key]);
     }
 
+    /**
+     * Saves one page of a report: "mine" writes only your page's columns, "competitor" only the competitor's.
+     * A speed result for one page then never rewrites the other page with an older copy of it, even when
+     * two requests for the same report overlap.
+     */
+    public function updateSide(string $key, string $side, array $report): void
+    {
+        global $wpdb;
+        if (!self::isKey($key)) {
+            return;
+        }
+        $names = $side === 'competitor'
+            ? ['competitor_results', 'competitor_overall_score']
+            : ['results', 'overall_score', 'grade'];
+        $wpdb->update(Installer::resultsTable(), array_intersect_key(self::columns($report), array_flip($names)), ['report_key' => $key]);
+    }
+
     public function attachLead(string $key, string $name, string $email): void
     {
         global $wpdb;

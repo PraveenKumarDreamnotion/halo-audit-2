@@ -19,8 +19,8 @@ final class JsonLd extends BaseCheck
     {
         $ld = $c->page->jsonLd();
         if ($ld['invalid'] > 0) {
-            return Result::fail($ld['invalid'] . ' of ' . $ld['blocks'] . ' block(s) cannot be read');
+            return Result::fail($ld['invalid'] . ' of ' . $ld['blocks'] . ($ld['blocks'] === 1 ? ' block cannot' : ' blocks cannot') . ' be read');
         }
-        return $ld['blocks'] === 0 ? Result::warn('No JSON-LD found') : Result::pass($ld['blocks'] . ' valid block(s)');
+        return $ld['blocks'] === 0 ? Result::warn('No JSON-LD found') : Result::pass($ld['blocks'] . ($ld['blocks'] === 1 ? ' valid block' : ' valid blocks'));
     }
 }

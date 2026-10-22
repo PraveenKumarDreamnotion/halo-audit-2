@@ -266,6 +266,114 @@ Restored on 2026-10-16 at the request of the developer, because the tool page
 - Comparison findings are paired by check ID on the server (`ReportView::pairs`); the browser and the PDF
   render the pairs, one column per page.
 
+### Competitor speed, PDF name and PDF layout (amendment, 2026-10-19, pending review)
+
+- Each page of a comparison gets its own `/speed` request (`side=mine`, then `side=competitor`). Before, the
+  competitor's request was only sent after your page's request answered, so a failed first request (gateway
+  timeout, rate limit) meant the competitor was never tested. A failure now marks only that page Not measured.
+- The requests stay one after the other, not parallel: one audit never holds two PHP workers for up to 90 s.
+- Each page's speed result is written to that page's columns only (`ReportStore::updateSide`), so overlapping
+  requests cannot put back an older copy of the other page.
+- Speed rows that have not run yet say "The speed test had not finished yet"; with no PageSpeed key, "Speed is
+  not tested on this site". Still `not_measured`, so scoring is unchanged. The PDF button waits for a running
+  speed test, and a PDF made mid-test says which page had not finished.
+- The PDF is always `halo-audit.pdf`. New layout: cover with score and grade, area summary with counts,
+  findings per area; results carry a sign and a word, so they read in grayscale.
+- PageSpeed (second pass, same day). Google's Performance score is read from
+  `lighthouseResult.categories.performance.score` (0 to 1, times 100 once, in `PsiClient::parse`), LCP from
+  `audits.largest-contentful-paint.numericValue` (ms) and CLS from `audits.cumulative-layout-shift.numericValue`,
+  mobile strategy, lab data only (no CrUX field data is read). A score outside 0 to 1 or a negative or infinite
+  metric is now treated as no result. Unchanged: one missing metric makes all three speed checks Not measured.
+- The Speed group score is Halo Audit's own (section 3.3: pass 100, warn 50, fail 0, weighted by severity:
+  performance 3, LCP 2, CLS 2). Google's 82 with LCP 4.4 s and CLS 0.01 gives (150 + 0 + 200) / 7 = 50. The PDF
+  now says so: a "Google PageSpeed results" table per page labels Google's figures as a mobile lab test and the
+  Speed score as Halo Audit's own, with its weights. The formula and thresholds are unchanged. Open question:
+  section 3.2 uses "under 2.5 s" and "under 0.1" for a pass, where Google counts exactly 2.5 s and 0.1 as good.
+- PDF: a "Top fixes" list (Fix before Improve, then check severity, then area weight; at most 5; your page only
+  in a comparison). Section titles sit in the first row of their table head, so a title is never left alone at
+  the foot of a page and it repeats on each page the table runs onto. Ligatures are off, so "fi" in an address is
+  copied as two letters. Design pass (same day): first page = audited page(s), score card(s), "At a glance"
+  (only facts from the stored scores), result key, area summary, Top fixes; every table uses mPDF
+  `overflow:wrap`, so long addresses wrap without inserted zero-width spaces. mPDF stays: Dompdf would add a second HTML engine for no layout gain shown here, and
+  tc-lib-pdf needs PHP 8.2.
+- PDF redesign (later the same day; supersedes the "At a glance" layout above). Page 1 is an executive summary:
+  title, pages, keyword, report date, score cards, "What the results mean" (sentences built only from stored
+  scores and counts, plus the grade scale of `Scorer::grade`), "Scores by area" with bars, "Priority fixes" (same
+  order and limit as Top fixes). Page 2 on: result key, "Speed and performance" (Google's three measures and the
+  Halo Audit Speed score in one table; the Speed area is no longer printed twice), then On-page, Technical, AI
+  readiness (and Education extras). A check's "What to do" is a tinted row under its results, joined to the check
+  by rowspan so mPDF keeps them on one page; the competitor's fix is never printed. Running header from page 2,
+  credit (`halo_audit_pdf_footer`) in the footer of every page, so no last page holds only the credit. The details
+  start on a new page only when the summary fitted on page 1. Browsershot/Chromium was not chosen: the plugin ships
+  as a ZIP for ordinary WordPress hosts (no Node or Chromium in the DevKinsta PHP container either).
+- Devanagari (QA pass, same day). `Pdf::e()` tags Devanagari runs (danda included) `lang="hi"`; mPDF
+  `autoLangToFont` asks `Wp\PdfFonts`, which returns the family `halodeva` (FreeSans.ttf for regular and bold,
+  useOTL 0xFF) for `hi` and keeps the current font for every other language. FreeSans over FreeSerif: sans like
+  DejaVu, full Devanagari with deva/dev2 tables, 1.5 MB instead of 4.6 MB, already in mPDF's package. Not
+  `autoScriptToLang`: it leaves the danda in the following Latin run (a box). Not FreeSans Bold: mPDF 8.3 misplaces
+  the anusvara in it (HarfBuzz shapes the same font correctly), so bold Hindi is regular weight. Not in scope:
+  CJK (a CJK font is about 20 MB), Tamil, Telugu, Kannada, Gujarati, Oriya (not in FreeSans), Bengali and Malayalam
+  (regular only). Copied Hindi text is in display order (mPDF writes no ActualText).
+
+### PDF second design pass (amendment, 2026-10-20, pending review)
+
+From the PDF redesign review (Option A: keep mPDF 8.3.1, redesign the template).
+- One type scale, nothing below 7.5 pt: title 24, score numerals 36, section 14, lede and area scores 11, check
+  names 9.5, body 9, supporting text 8, labels 7.5. Margins 18 mm at the sides; colours are tokens in `Pdf::css()`.
+- A result is the status chip and the evidence on one line (`<span class="evidence">`), long evidence wraps under.
+- Each area: the checks that need a look first (your Fix, Improve, not measured, then checks only the competitor
+  failed; report order within each), in full with why and what to do; then a compact "Passed" table (comparison:
+  passed on both pages) with status and evidence but no why. Every check is printed once; scoring, check order in
+  the stored report and the priority ranking are unchanged.
+- Section titles are headings kept with their table (`use_kwt`, written by `Pdf::heading()`); the table head carries
+  only the column names and, in a comparison, each page's score, so continuation pages repeat a compact head and
+  not the title. Tried and rejected: a title row in the thead (repeated in full); a table `<caption>` (left alone
+  at a page foot when the first row moved on); a plain h2 (when mPDF moves it with its table it lays the table out
+  first and the heading lost its font). The heading's first letter is 0.02 pt larger so mPDF always writes the
+  font before the heading text; checked on rendered pages (no heading drawn in table type, none stranded).
+- Speed: each measure's name cell says whose measure it is and its unit; the Lighthouse value is printed as
+  "N / 100" (`Pdf::lighthouseValue`, display only; stored evidence unchanged); one note on lab data and the weights.
+  Page 1 labels the area "Speed (Halo Audit)".
+- "What the results mean": areas in plain words (on-page SEO, technical SEO, AI readiness, speed), one sentence
+  each for ahead, behind and level. Score cards show each page's host; the competitor bar is #7e837f (3.1:1 on the
+  track) and thinner than your page's, so the two stay apart on a grayscale print.
+- Default credit: "Report generated by <Site Title> with Halo Audit." (host when there is no title); no address, so
+  a staging or local site no longer prints its internal URL. The filter is unchanged.
+- Asset lock: mPDF gets `whitelistStreamWrappers = []` and, through its service container, a local-content loader
+  and HTTP client that read nothing (mPDF 8.3.1 type-hints its concrete AssetFetcher, so the fetcher itself cannot
+  be replaced). Fonts are opened directly and are not affected. `Pdf::refusedFetches()` lists refused paths (tests).
+- Check wording only (no logic): singular/plural in Certificate, HeadingOrder, InternalLinks, JsonLd, RedirectChain,
+  SitemapFreshness; FaqSchema's pass with no FAQ content now says "No FAQ content on this page, so no FAQ schema is
+  needed". Whether that case should be "Not applicable" instead of Pass is an open product decision. Stored
+  reports keep their old wording.
+- `bin/build-zip.sh` stops when `PdfFonts.php` or the FreeFont licence is not exported (untracked files are left out).
+
+### PDF dashboard redesign (amendment, 2026-10-20, pending review)
+
+Supersedes the page-1 composition and the findings tables of the second design pass. Kept: mPDF 8.3.1, asset lock,
+Devanagari font map, escaping, type scale (nothing below 7.5 pt), problems-first plus compact passed lists, the
+priority order, kept headings (`Pdf::heading()`), the credit filter.
+
+- **Page 1:**
+  - a rounded hero card (eyebrow, title, lede, pages, keyword, date, status);
+  - a rounded score panel: SVG score rings, grade chips, the difference in a comparison, and "What the results mean";
+  - metric cards for your page's to fix / to improve / passed / not measured counts, with the competitor's counts in a comparison;
+  - one card per scored area, two to a row (matched to the reference dashboard on 2026-10-20). Each card has the name with its counts as labelled status chips, the Halo Audit score beside them, a full-width SVG bar (the competitor's thinner and grey, with the difference), and a tinted foot with the top issue, picked by the same ranking as the priority fixes. Each row of cards is its own table that is never split;
+  - the priority fixes.
+- **Findings:**
+  - each check is a card table that is never split: status stripe, check and why, each page's result labelled "Your page" / "Competitor", and the "What to do" band;
+  - passed checks are a compact list;
+  - each section heading carries its scores.
+- **mPDF facts used, each checked on rendered pages:**
+  - `border-radius` works on top-level blocks but not on tables or cells, so card grids are square-cornered tables, which also keeps cards in a row equally tall;
+  - a block inside a cell draws badly;
+  - floats render but are unsafe near page breaks;
+  - an inline `<svg>` is written to a temp file and read back, which the asset lock refuses; a `data:image/svg+xml` image is decoded in memory and drawn as vectors, not as an embedded image;
+  - a heading moved by `use_kwt` leaves its background behind, so headings use a rule and no fill;
+  - a `.class strong` size rule does not apply inside these cells, so check names are 9 pt bold, as in the previous design;
+  - margins and padding on a block inside a cell are ignored, so spacing inside cards comes from cell padding or line-height;
+  - for a `page-break-inside:avoid` table, mPDF subtracts a keep-with-table heading's height from the remaining space although the heading is already placed (a double count), so "Scores by area" keeps its heading with the first card row with a `page-break-inside:avoid` div instead.
+
 ### Endpoints
 
 All move from `admin-ajax.php` to REST under `/wp-json/halo-audit/v1/`.
@@ -275,7 +383,7 @@ REST routes have explicit permission callbacks and are easy to test.
 |---|---|---|
 | `GET /nonce` | Returns a fresh nonce (fixes stale nonces on cached pages) | none |
 | `POST /analyze` | Runs the fast checks, stores the report, returns the free view + report ID | nonce, rate limit |
-| `POST /speed` | Runs PageSpeed for a report ID, updates the stored report, returns the new free view | nonce, report ID |
+| `POST /speed` | Runs PageSpeed for one page of a report ID (`side=mine` or `side=competitor`; no `side` = the first page without a result), saves that page only, returns the new free view | nonce, report ID |
 | `POST /gate/send` | Emails a code | nonce, rate limit |
 | `POST /gate/verify` | Checks the code, saves the lead, sets the cookie | nonce, attempt limit |
 | `GET /report/{id}` | Returns the full findings | report ID + valid unlock |

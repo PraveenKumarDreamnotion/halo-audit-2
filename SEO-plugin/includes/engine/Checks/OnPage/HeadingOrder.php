@@ -25,6 +25,6 @@ final class HeadingOrder extends BaseCheck
             }
             $previous = $heading['level'];
         }
-        return $skips === 0 ? Result::pass('No skipped levels') : Result::warn($skips . ' skipped level(s)');
+        return $skips === 0 ? Result::pass('No skipped levels') : Result::warn($skips . ($skips === 1 ? ' skipped level' : ' skipped levels'));
     }
 }

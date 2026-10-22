@@ -134,9 +134,9 @@ final class RestController
 
         if (!self::speedEnabled()) {
             // No key: Speed stays "Not measured" and the browser has no speed request to make.
-            $report['speed_done'] = true;
+            $report = Analyzer::skipSpeed($report);
             if ($competitor !== null) {
-                $competitor['speed_done'] = true;
+                $competitor = Analyzer::skipSpeed($competitor);
             }
         }
         // Kept with the report for the Brevo contact: the audited addresses as typed (URL, COMPETITOR_URL;
@@ -163,9 +163,11 @@ final class RestController
     }
 
     /**
-     * Measures one page per call: your page first, then (in a comparison) the competitor page, which the
-     * browser asks for with a second call. One PageSpeed run can take 90 seconds, so two in one request
-     * could pass the web server's time limit.
+     * Measures one page per call. side=mine is your page, side=competitor the competitor page of a comparison;
+     * the browser asks for each page in its own call, so a failed call for one page never stops the other.
+     * One PageSpeed run can take 90 seconds, so two in one request could pass the web server's time limit.
+     * A call without side (a page cached with an older script) measures the first page that has no result.
+     * A page that already has its result is never measured again.
      */
     public function speed(\WP_REST_Request $request)
     {
@@ -175,26 +177,38 @@ final class RestController
         }
         $report = $row['report'];
         $competitor = $report['competitor'] ?? null;
-        $mine = empty($report['speed_done']);
-        if ($mine || ($competitor !== null && empty($competitor['speed_done']))) {
+        $side = (string) $request->get_param('side');
+        if ($side === '') {
+            $side = $competitor === null || empty($report['speed_done']) ? 'mine' : 'competitor';
+        }
+        if (($side !== 'mine' && $side !== 'competitor') || ($side === 'competitor' && $competitor === null)) {
+            return new \WP_Error('halo_input', 'This report has no such page to test.', ['status' => 400]);
+        }
+
+        $target = $side === 'mine' ? $report : $competitor;
+        if (empty($target['speed_done'])) {
             if (!RateLimiter::allow('speed', self::clientIp(), 20, HOUR_IN_SECONDS)) {
                 return new \WP_Error('halo_rate', 'Too many speed tests. Try again later.', ['status' => 429]);
             }
             if (function_exists('set_time_limit')) {
                 @set_time_limit(120);
             }
-            $target = $mine ? $report : $competitor;
             $psi = self::speedEnabled()
                 ? (new PsiClient(Plugin::http(), (string) get_option('halo_audit_psi_key', '')))->run($target['url'])
                 : null;
-            if ($mine) {
+            if ($side === 'mine') {
                 $report = Analyzer::applySpeed($report, $psi);
             } else {
                 $report['competitor'] = Analyzer::applySpeed($competitor, $psi);
             }
-            $this->store->update($row['key'], $report);
+            $this->store->updateSide($row['key'], $side, $report);
+            // Answer with what is stored now: the other page may have been saved since this request read the row.
+            $saved = $this->store->get($row['key']);
+            if ($saved !== null) {
+                $report = $saved['report'];
+            }
         }
-        return new \WP_REST_Response(ReportView::free($report) + ['report_id' => $row['key'], 'unlocked' => $this->gate->current() !== null]);
+        return new \WP_REST_Response(ReportView::free($report) + ['report_id' => $row['key'], 'side' => $side, 'unlocked' => $this->gate->current() !== null]);
     }
 
     public function gateSend(\WP_REST_Request $request)
@@ -262,11 +276,23 @@ final class RestController
         if (!RateLimiter::allow('pdf', self::clientIp(), 20, HOUR_IN_SECONDS)) {
             return new \WP_Error('halo_rate', 'Too many downloads. Try again later.', ['status' => 429]);
         }
-        $bytes = Pdf::render($row['report']);
+        // Anything printed while the PDF is drawn (a PHP notice with display_errors on) is dropped: it would sit
+        // before %PDF- and break the file. A renderer failure is a plain error answer, not a half-sent file.
+        ob_start();
+        try {
+            $bytes = Pdf::render($row['report']);
+        } catch (\Throwable $e) {
+            $bytes = null; // Nothing is logged: the report holds the visitor's addresses (see RepoHygieneTest).
+        } finally {
+            ob_end_clean();
+        }
+        if ($bytes === null) {
+            return new \WP_Error('halo_pdf', 'The PDF could not be made. Try again.', ['status' => 500]);
+        }
 
         nocache_headers();
         header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . Pdf::filename($row['report']) . '"');
+        header('Content-Disposition: attachment; filename="' . Pdf::FILENAME . '"');
         header('Content-Length: ' . strlen($bytes));
         echo $bytes; // phpcs:ignore WordPress.Security.EscapeOutput -- binary PDF
         exit;

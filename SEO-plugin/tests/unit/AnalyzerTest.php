@@ -3,6 +3,7 @@ namespace HaloAudit\Tests;
 
 use HaloAudit\Analyzer;
 use HaloAudit\Fetcher;
+use HaloAudit\PsiClient;
 use HaloAudit\ReportView;
 use HaloAudit\Response;
 use HaloAudit\Tests\Support\FakeHttp;
@@ -206,6 +207,30 @@ final class AnalyzerTest extends TestCase
         $this->assertTrue($failed['speed_done']);
         $this->assertNull($failed['summary']['groups']['speed']['score']);
         $this->assertSame($report['summary']['overall'], $failed['summary']['overall']);
+    }
+
+    /**
+     * Google's Performance score is kept as Google gave it. The Speed group score is Halo Audit's own: pass 100,
+     * improve 50, fix 0, weighted by severity (performance 3, LCP 2, CLS 2). 82, 4.4 s and 0.01 give
+     * (50 x 3 + 0 x 2 + 100 x 2) / 7 = 50.
+     */
+    public function test_speed_group_is_halo_audits_own_score_not_googles(): void
+    {
+        $this->servePage();
+        $report = $this->analyzer->analyze('https://example.com/courses/mba/', 'mba')['report'];
+        $psi = PsiClient::parse('{"lighthouseResult":{"categories":{"performance":{"score":0.82}},"audits":{"largest-contentful-paint":{"numericValue":4400},"cumulative-layout-shift":{"numericValue":0.01}}}}');
+
+        $done = Analyzer::applySpeed($report, $psi);
+        $speed = array_column(array_filter($done['checks'], static fn(array $r): bool => $r['group'] === 'speed'), null, 'id');
+        $this->assertSame(['warn', '82 out of 100 (Google Lighthouse, mobile lab test)'], [$speed['psi_score']['status'], $speed['psi_score']['evidence']]);
+        $this->assertSame(['fail', '4.4 seconds'], [$speed['lcp']['status'], $speed['lcp']['evidence']]);
+        $this->assertSame(['pass', '0.01'], [$speed['cls']['status'], $speed['cls']['evidence']]);
+        $this->assertSame(50, $done['summary']['groups']['speed']['score']);
+
+        $zero = Analyzer::applySpeed($report, ['score' => 0, 'lcp_ms' => 2000.0, 'cls' => 0.0]);
+        $zeroRows = array_column($zero['checks'], null, 'id');
+        $this->assertSame(['fail', '0 out of 100 (Google Lighthouse, mobile lab test)'], [$zeroRows['psi_score']['status'], $zeroRows['psi_score']['evidence']]);
+        $this->assertSame(57, $zero['summary']['groups']['speed']['score']); // (0 x 3 + 100 x 2 + 100 x 2) / 7
     }
 
     public function test_free_view_hides_findings_and_full_view_shows_them(): void

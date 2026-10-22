@@ -15,6 +15,24 @@ final class PsiClientTest extends TestCase
         $this->assertSame(['score' => 87, 'lcp_ms' => 2310.5, 'cls' => 0.04], PsiClient::parse(self::GOOD));
     }
 
+    private static function lighthouse(string $score, string $lcp, string $cls): string
+    {
+        return '{"lighthouseResult":{"categories":{"performance":{"score":' . $score . '}},"audits":{"largest-contentful-paint":{"numericValue":'
+            . $lcp . '},"cumulative-layout-shift":{"numericValue":' . $cls . '}}}}';
+    }
+
+    /** The score is converted from 0 to 1 once; LCP stays in milliseconds and CLS has no unit. */
+    public function test_parse_converts_the_score_once_and_keeps_metric_units(): void
+    {
+        $this->assertSame(['score' => 82, 'lcp_ms' => 4400.0, 'cls' => 0.01], PsiClient::parse(self::lighthouse('0.82', '4400', '0.01')));
+        $this->assertSame(['score' => 37, 'lcp_ms' => 15600.0, 'cls' => 0.31], PsiClient::parse(self::lighthouse('0.37', '15600', '0.31')));
+    }
+
+    public function test_parse_keeps_a_zero_score_as_a_measurement(): void
+    {
+        $this->assertSame(['score' => 0, 'lcp_ms' => 0.0, 'cls' => 0.0], PsiClient::parse(self::lighthouse('0', '0', '0')));
+    }
+
     /** @dataProvider bad */
     public function test_parse_returns_null_for_unusable_payloads(string $json): void
     {
@@ -25,8 +43,20 @@ final class PsiClientTest extends TestCase
     {
         return [
             'not json' => ['<html>'],
+            'empty body' => [''],
+            'json that is not an object' => ['"lighthouseResult"'],
             'error payload' => ['{"error":{"code":429}}'],
             'null score' => ['{"lighthouseResult":{"categories":{"performance":{"score":null}},"audits":{}}}'],
+            'runtime error' => ['{"lighthouseResult":{"runtimeError":{"code":"NO_FCP"},"categories":{"performance":{"score":null}},"audits":{"largest-contentful-paint":{},"cumulative-layout-shift":{}}}}'],
+            'missing LCP audit' => ['{"lighthouseResult":{"categories":{"performance":{"score":0.82}},"audits":{"cumulative-layout-shift":{"numericValue":0.01}}}}'],
+            'missing CLS value' => ['{"lighthouseResult":{"categories":{"performance":{"score":0.82}},"audits":{"largest-contentful-paint":{"numericValue":4400},"cumulative-layout-shift":{"displayValue":"0.01"}}}}'],
+            'score already out of 100' => [self::lighthouse('82', '4400', '0.01')],
+            'score as text out of range' => [self::lighthouse('"82"', '4400', '0.01')],
+            'negative score' => [self::lighthouse('-0.1', '4400', '0.01')],
+            'negative LCP' => [self::lighthouse('0.82', '-5', '0.01')],
+            'negative CLS' => [self::lighthouse('0.82', '4400', '-0.3')],
+            'infinite LCP' => [self::lighthouse('0.82', '1e400', '0.01')],
+            'score not a number' => [self::lighthouse('true', '4400', '0.01')],
         ];
     }
 

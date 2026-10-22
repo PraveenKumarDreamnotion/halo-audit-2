@@ -23,7 +23,7 @@ final class RedirectChain extends BaseCheck
             return Result::pass('No redirect');
         }
         $statuses = array_column($chain, 'status');
-        $evidence = $hops . ' redirect(s): ' . implode(', ', $statuses);
+        $evidence = $hops . ($hops === 1 ? ' redirect: ' : ' redirects: ') . implode(', ', $statuses);
         if ($hops > 2) {
             return Result::fail($evidence);
         }

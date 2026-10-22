@@ -190,16 +190,16 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         'meta_description' => ['pass', '150 characters'],
         'single_h1' => ['pass', '1 H1 heading'],
         'keyword_in_h1' => ['pass', 'Found in the H1'],
-        'heading_order' => ['warn', '1 skipped level(s)'],
+        'heading_order' => ['warn', '1 skipped level'],
         'keyword_in_url' => ['pass', 'All keyword words are in the address'],
         'canonical' => ['pass', 'https://www.mine-fixture.com/courses/online-mba/'],
         'noindex' => ['pass', 'No noindex instruction'],
         'word_count' => ['pass', '376 words'],
         'image_alt' => ['warn', '4 of 5 images have an alt attribute'],
-        'internal_links' => ['pass', '3 internal link(s)'],
+        'internal_links' => ['pass', '3 internal links'],
         'https' => ['pass', 'Served over HTTPS'],
-        'certificate' => ['pass', '90 day(s) left'],
-        'redirect_chain' => ['pass', '1 redirect(s): 301'],
+        'certificate' => ['pass', '90 days left'],
+        'redirect_chain' => ['pass', '1 redirect: 301'],
         'robots_reachable' => ['pass', 'Found'],
         'sitemap' => ['pass', 'A valid XML sitemap was found'],
         'security_headers' => ['warn', '4 of 6 present. Missing: content-security-policy, permissions-policy'],
@@ -207,7 +207,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         'js_rendering' => ['pass', '376 words in the first HTML response'],
         'ai_crawlers' => ['warn', 'Blocked: GPTBot'],
         'llms_txt' => ['pass', 'Found and well formed'],
-        'json_ld' => ['pass', '1 valid block(s)'],
+        'json_ld' => ['pass', '1 valid block'],
         'schema_types' => ['pass', 'Found: Organization, Course'],
         'faq_schema' => ['warn', 'An FAQ heading and no FAQPage schema'],
         'semantic_html' => ['pass', '5 of 5 present: main, article, nav, header, footer'],
@@ -215,7 +215,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         'twitter_card' => ['pass', 'summary_large_image'],
         'og_image' => ['pass', '1200 by 630 pixels'],
         'feed' => ['pass', 'A feed was found'],
-        'psi_score' => ['warn', '72 out of 100 (Google PageSpeed, mobile)'],
+        'psi_score' => ['warn', '72 out of 100 (Google Lighthouse, mobile lab test)'],
         'lcp' => ['warn', '3.1 seconds'],
         'cls' => ['pass', '0.05'],
     ];
@@ -226,13 +226,13 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         'meta_description' => ['warn', '100 characters'],
         'single_h1' => ['fail', '2 H1 headings'],
         'keyword_in_h1' => ['pass', 'Found in the H1'],
-        'heading_order' => ['warn', '1 skipped level(s)'],
+        'heading_order' => ['warn', '1 skipped level'],
         'keyword_in_url' => ['fail', '"online" is not in the address'],
         'canonical' => ['warn', 'Points to https://rival-fixture.org/mba-online/'],
         'noindex' => ['fail', 'noindex in the X-Robots-Tag header'],
         'word_count' => ['fail', '120 words'],
         'image_alt' => ['fail', '0 of 2 images have an alt attribute'],
-        'internal_links' => ['warn', '1 internal link(s)'],
+        'internal_links' => ['warn', '1 internal link'],
         'https' => ['fail', 'Served over HTTP'],
         'certificate' => ['not_measured', 'The certificate could not be read'],
         'redirect_chain' => ['pass', 'No redirect'],
@@ -243,7 +243,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         'js_rendering' => ['warn', '120 words in the first HTML response'],
         'ai_crawlers' => ['not_measured', 'The robots.txt rules could not be read (HTTP 503)'],
         'llms_txt' => ['not_measured', 'The site did not let us check llms.txt (HTTP 403)'],
-        'json_ld' => ['fail', '1 of 2 block(s) cannot be read'],
+        'json_ld' => ['fail', '1 of 2 blocks cannot be read'],
         'schema_types' => ['warn', 'Found: CollegeOrUniversity'],
         'faq_schema' => ['fail', '5 questions and no FAQPage schema'],
         'semantic_html' => ['fail', '0 of 5 present'],
@@ -251,7 +251,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         'twitter_card' => ['warn', 'No twitter:card tag'],
         'og_image' => ['fail', 'No og:image tag'],
         'feed' => ['not_measured', 'The feed addresses could not all be checked'],
-        'psi_score' => ['pass', '95 out of 100 (Google PageSpeed, mobile)'],
+        'psi_score' => ['pass', '95 out of 100 (Google Lighthouse, mobile lab test)'],
         'lcp' => ['pass', '1.8 seconds'],
         'cls' => ['fail', '0.31'],
         // Education extras: shown (CollegeOrUniversity schema) but never scored.
@@ -380,30 +380,41 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
     public function test_comparison_pdf_shows_the_same_status_evidence_and_scores_as_the_unlocked_report(): void
     {
         [$id, $full] = $this->compare();
-        $html = Pdf::html(Plugin::store()->get($id)['report']);
-        $labels = ['pass' => 'Pass', 'warn' => 'Improve', 'fail' => 'Fix', 'not_measured' => 'Not measured'];
+        // Zero-width spaces are the PDF's line-break points in long text; they are not part of the text.
+        $html = str_replace("\u{200B}", '', Pdf::html(Plugin::store()->get($id)['report']));
+        $labels = ['pass' => '✓ Pass', 'warn' => '! Improve', 'fail' => '✗ Fix', 'not_measured' => '○ Not measured'];
         $e = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
-        preg_match_all('#<tr><td><strong>([^<]*)</strong></td><td class="mine">(.*?)</td><td class="theirs">(.*?)</td></tr>#s', $html, $rows, PREG_SET_ORDER);
+        $rows = Halo_Pdf_Rows::comparison($html);
         $this->assertCount(count($full['pairs']), $rows, 'One PDF row per finding pair.');
-        foreach ($full['pairs'] as $i => $pair) {
-            [, $title, $mineCell, $theirCell] = $rows[$i];
-            $this->assertSame($e($pair['title']), $title, $pair['id']);
+        foreach ($full['pairs'] as $pair) {
+            $this->assertArrayHasKey($e($pair['title']), $rows, $pair['id']);
+            [$mineCell, $theirCell, $fixText] = $rows[$e($pair['title'])];
             foreach (['mine' => $mineCell, 'theirs' => $theirCell] as $side => $cell) {
                 if ($pair[$side] === null) {
                     $this->assertStringContainsString('Not checked', $cell, $pair['id']);
                     continue;
                 }
-                $this->assertMatchesRegularExpression('#>' . preg_quote($labels[$pair[$side]['status']], '#') . '</span><br>' . preg_quote($e($pair[$side]['evidence']), '#') . '(<br>|$)#', $cell, $side . ' ' . $pair['id']);
+                $shown = $pair['id'] === 'psi_score' ? Pdf::lighthouseValue($pair[$side]['evidence']) : $pair[$side]['evidence'];
+                $evidence = $shown === '' ? '' : ' <span class="evidence">' . preg_quote($e($shown), '#') . '</span>';
+                $this->assertMatchesRegularExpression('#^<span class="chip chip-' . $pair[$side]['status'] . '">' . preg_quote($labels[$pair[$side]['status']], '#') . '</span>' . $evidence . '$#u', $cell, $side . ' ' . $pair['id']);
             }
-            $fix = $pair['mine']['message'] ?? '';
-            $fix === '' ? $this->assertStringNotContainsString('What to do', $mineCell) : $this->assertStringContainsString($e($fix), $mineCell, $pair['id']);
+            // The fix is your page's, in its own row under the results.
+            $this->assertSame($e($pair['mine']['message'] ?? ''), $fixText, $pair['id']);
         }
-        $this->assertStringContainsString('<td><strong>Overall</strong></td><td><strong>87</strong></td><td><strong>29</strong></td>', $html);
+        // Overall scores: the numbers in the two score rings, then each page's grade beside its ring.
+        $this->assertSame(['87', '29'], Halo_Pdf_Rows::rings($html));
+        $this->assertMatchesRegularExpression('#<div class="sp-label">Your page</div><div class="sp-host">[^<]+</div><div class="sp-of">[^<]+</div><div class="grade grade-b">Grade B</div>#', $html);
+        $this->assertMatchesRegularExpression('#<div class="sp-label">Competitor</div><div class="sp-host">[^<]+</div><div class="sp-of">[^<]+</div><div class="grade grade-f">Grade F</div>#', $html);
         foreach (self::MINE_GROUPS as $g => [$score]) {
-            $this->assertStringContainsString('Your page: ' . $score . ' / 100 &nbsp; Competitor page: ' . self::THEIRS_GROUPS[$g][0] . ' / 100', $html, $g);
+            $theirs = self::THEIRS_GROUPS[$g][0];
+            // Each area's card on page 1: your score, then the competitor's.
+            $this->assertMatchesRegularExpression('#<div class="c-score">' . $score . '<span class="c-of"> / 100</span></div>.*?<div class="c-vs">Competitor ' . $theirs . ' / 100&nbsp;#s', $html, $g);
+            // And beside each section's title (Speed: its Halo Audit Speed score row as well).
+            $this->assertStringContainsString($g === 'speed'
+                ? '<td class="halo halo-score">' . $score . ' / 100</td><td class="halo halo-score">' . $theirs . ' / 100</td>'
+                : 'Your page ' . $score . ' / 100 &middot; competitor ' . $theirs . ' / 100</span>', $html, $g);
         }
-        $this->assertStringContainsString('87 / 100 &nbsp; Grade B', $html);
     }
 
     public function test_single_page_pdf_shows_the_same_findings_as_the_unlocked_report(): void
@@ -412,17 +423,19 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         $this->call('POST', '/speed', ['report_id' => $id]);
         $this->unlock();
         $full = $this->call('GET', '/report/' . $id)->get_data();
-        $html = Pdf::html(Plugin::store()->get($id)['report']);
-        $labels = ['pass' => 'Pass', 'warn' => 'Improve', 'fail' => 'Fix', 'not_measured' => 'Not measured'];
+        $html = str_replace("\u{200B}", '', Pdf::html(Plugin::store()->get($id)['report']));
+        $labels = ['pass' => '✓ Pass', 'warn' => '! Improve', 'fail' => '✗ Fix', 'not_measured' => '○ Not measured'];
         $e = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
         $this->assertSame(self::MINE_EXPECTED, self::byId($full['checks']));
-        preg_match_all('#<tr><td class="status"[^>]*>(.*?)</td><td><strong>(.*?)</strong><br>(.*?)(?:<br><em>What to do:</em> (.*?))?</td></tr>#s', $html, $rows, PREG_SET_ORDER);
+        $rows = Halo_Pdf_Rows::single($html);
         $this->assertCount(count($full['checks']), $rows);
-        foreach ($full['checks'] as $i => $row) {
-            $this->assertSame([$labels[$row['status']], $e($row['title']), $e($row['evidence']), $e($row['message'])], [$rows[$i][1], $rows[$i][2], $rows[$i][3], $rows[$i][4] ?? ''], $row['id']);
+        foreach ($full['checks'] as $row) {
+            $shown = $row['id'] === 'psi_score' ? Pdf::lighthouseValue($row['evidence']) : $row['evidence'];
+            $this->assertSame([$labels[$row['status']], $e($shown), $e($row['message'])], $rows[$e($row['title'])] ?? null, $row['id']);
         }
-        $this->assertStringContainsString('87 / 100 &nbsp; Grade B', $html);
+        $this->assertSame(['87'], Halo_Pdf_Rows::rings($html));
+        $this->assertMatchesRegularExpression('#<div class="sp-label">Overall score</div><div class="sp-host">[^<]+</div><div class="sp-of">out of 100</div><div class="grade grade-b">Grade B</div>#', $html);
     }
 
     /* Speed: thresholds and rounding, worked out by hand */

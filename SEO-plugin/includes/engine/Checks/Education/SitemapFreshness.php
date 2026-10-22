@@ -21,7 +21,7 @@ final class SitemapFreshness extends BaseCheck
             return Result::notMeasured('UNKNOWN: the sitemap has no last-modified dates');
         }
         $days = max(0, (int) floor(($c->now - $newest) / 86400));
-        $text = 'last update ' . $days . ' day(s) ago';
+        $text = 'last update ' . $days . ($days === 1 ? ' day' : ' days') . ' ago';
         if ($days <= 14) {
             return Result::pass('ACTIVE: ' . $text);
         }

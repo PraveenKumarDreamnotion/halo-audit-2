@@ -67,13 +67,13 @@ npx wp-env run tests-cli --env-cwd=wp-content/plugins/SEO-plugin php vendor/phpu
 
 The tests make no real network calls. Every HTTP request, including those to Brevo and PageSpeed, is answered by a test stub. Codes are captured instead of emailed.
 
-Last recorded results, on this exact tree (2026-10-16):
+Last recorded results, on this exact tree (2026-10-22):
 
 | Check | Result |
 |---|---|
-| Unit, PHP 8.0, 8.1, 8.3 | 400 tests OK on each |
-| Integration, PHP 8.1 | 263 tests OK |
-| `php -l` on 113 files, PHP 8.0, 8.1, 8.3 | No errors |
+| Unit, PHP 8.0, 8.1, 8.3 | 416 tests OK on each |
+| Integration, PHP 8.1 | 305 tests OK |
+| `php -l` on 116 files, PHP 8.0, 8.1, 8.3 | No errors |
 | `node --check public/js/halo-audit.js` | OK |
 
 Not run: integration tests on PHP 8.0, WordPress 6.2, and real email, Brevo or PageSpeed calls.
@@ -99,4 +99,4 @@ Full detail is in [issue #1](https://github.com/PraveenKumarDreamnotion/halo-aud
 
 ## Licence
 
-The plugin is licensed under the **GNU General Public License, version 2 or (at your option) any later version**, as its header declares (`SEO-plugin/README.txt`, `SEO-plugin/composer.json`). The full text of version 2 is in [`LICENSE`](LICENSE). Third-party packages installed by Composer carry their own licences.
+The plugin is licensed under the **GNU General Public License, version 2 or (at your option) any later version**, as its header declares (`SEO-plugin/README.txt`, `SEO-plugin/composer.json`). The full text of version 2 is in [`LICENSE`](LICENSE). Third-party packages installed by Composer carry their own licences. The built ZIP also ships FreeSans from GNU FreeFont (from mPDF's font folder), used for Devanagari text in the PDF. It is licensed under the GNU General Public License, version 3 or later, with the FreeFont font exception, so a PDF that embeds the font is not itself covered by the GPL. The full terms are in [`SEO-plugin/licenses/FreeFont-GPL-3.0-with-font-exception.txt`](SEO-plugin/licenses/FreeFont-GPL-3.0-with-font-exception.txt).

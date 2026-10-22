@@ -11,3 +11,4 @@ tests_add_filter('muplugins_loaded', static function () use ($plugin_dir) {
 });
 
 require $tests_dir . '/includes/bootstrap.php';
+require_once __DIR__ . '/PdfRows.php';

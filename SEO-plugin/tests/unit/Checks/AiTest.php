@@ -135,6 +135,17 @@ final class AiTest extends TestCase
         $this->assertSame('warn', $this->status(Ai\FaqSchema::class, '', '<h2>FAQs</h2><details></details>'));
     }
 
+    /** No FAQ content stays a Pass (scored like any pass), and the evidence says why no schema is needed. */
+    public function test_faq_schema_without_faq_content_is_a_pass_that_says_why(): void
+    {
+        $result = (new Ai\FaqSchema())->run(Make::ctx(Make::page('', '<p>No questions here</p>'), Make::site([])));
+        $this->assertSame('pass', $result->status);
+        $this->assertSame('No FAQ content on this page, so no FAQ schema is needed', $result->evidence);
+
+        $row = ['id' => Ai\FaqSchema::ID, 'group' => Ai\FaqSchema::GROUP, 'severity' => Ai\FaqSchema::SEVERITY, 'status' => $result->status];
+        $this->assertSame(100, \HaloAudit\Scorer::score([$row])['groups']['ai']['score']);
+    }
+
     public function test_semantic_html(): void
     {
         $this->assertSame('pass', $this->status(Ai\SemanticHtml::class, '', '<header></header><nav></nav><main><article></article></main><footer></footer>'));

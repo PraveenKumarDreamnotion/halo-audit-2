@@ -398,14 +398,16 @@ class Halo_Compare_Test extends WP_UnitTestCase
         $report = Plugin::store()->get($id)['report'];
         $report['competitor']['url'] = 'https://rival.example.org/?q=<script>alert(1)</script>';
 
-        $html = Pdf::html($report);
-        $this->assertStringContainsString('Your page:', $html);
-        $this->assertStringContainsString('Competitor page:', $html);
-        $this->assertStringContainsString('<h2>Comparison</h2>', $html);
+        // Zero-width spaces are the PDF's line-break points in long addresses. Without them the address is
+        // still escaped, and nothing in it is markup.
+        $html = str_replace("\u{200B}", '', Pdf::html($report));
+        $this->assertStringContainsString('<td class="meta-label">Your page</td>', $html);
+        $this->assertStringContainsString('<td class="meta-label">Competitor page</td>', $html);
+        $this->assertStringContainsString('<h1>SEO comparison report</h1>', $html);
         $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html);
         $this->assertStringNotContainsString('<script>', $html);
         // One row per check that ran on either page, each page in its own column (see CompareFindingsSpeedTest).
-        $this->assertSame(count(\HaloAudit\ReportView::pairs($report['checks'], $report['competitor']['checks'])), substr_count($html, '<td class="theirs">'));
+        $this->assertCount(count(\HaloAudit\ReportView::pairs($report['checks'], $report['competitor']['checks'])), Halo_Pdf_Rows::comparison($html));
         $this->assertStringStartsWith('%PDF-', Pdf::render($report));
     }
 
@@ -413,9 +415,10 @@ class Halo_Compare_Test extends WP_UnitTestCase
     {
         $id = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'mba'])->get_data()['report_id'];
         $html = Pdf::html(Plugin::store()->get($id)['report']);
-        $this->assertStringNotContainsString('Comparison', $html);
+        $this->assertStringNotContainsString('comparison', $html);
         $this->assertStringNotContainsString('Competitor', $html);
-        $this->assertStringContainsString('<strong>Page:</strong>', $html);
+        $this->assertStringNotContainsString('competitor', $html);
+        $this->assertStringContainsString('<td class="meta-label">Page</td>', $html);
     }
 
     public function test_pdf_route_still_needs_the_unlock(): void

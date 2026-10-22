@@ -138,6 +138,7 @@
     this.results.hidden = true;
     clear(this.results);
     this.data = null;
+    this.speedRun = null;
     this.say(competitorField ? 'Reading both pages. This takes up to a minute.' : 'Reading the page. This takes up to 15 seconds.');
     this.setState('loading');
 
@@ -151,40 +152,49 @@
       self.render();
       self.setState('preview');
       if (data.unlocked) { self.loadFull(); }
-      // The server measures one page per call; a comparison needs a second call for the competitor.
-      function speedDone() { return data.speed_done && (!data.competitor || data.competitor.speed_done); }
-      function measure() {
-        if (speedDone()) { return null; }
-        return api('POST', 'speed', { report_id: data.report_id }).then(function (speed) {
-          if (self.data !== data) { return null; }
-          data.summary = speed.summary;
-          data.speed_done = speed.speed_done;
-          if (speed.competitor && data.competitor) {
-            data.competitor.summary = speed.competitor.summary;
-            data.competitor.speed_done = speed.competitor.speed_done;
-          }
-          self.renderSummary();
-          if (speedDone()) {
-            if (data.checks || data.unlocked) { self.loadFull(); }
-            return null;
-          }
-          return measure();
-        });
-      }
-      var measured = measure();
-      return measured && measured.catch(function () {
-        if (self.data !== data) { return; }
-        data.speed_done = true;
-        if (data.competitor) { data.competitor.speed_done = true; }
-        self.renderSummary();
-        // The findings' area lines also said "Testing speed...": show "Not measured" there too.
-        if (data.checks) { self.renderFindings(); }
-      });
+      self.speedRun = self.measureSpeed(data);
+      return self.speedRun;
     }).catch(function (error) {
       self.say(error.message, true);
       self.setState('error');
     }).then(function () {
       self.button.disabled = false;
+    });
+  };
+
+  /*
+   * The server measures one page per call: your page, then in a comparison the competitor page. Each page has
+   * its own call, so a failed or timed-out call marks only that page "Not measured" and the other page is still
+   * tested. The calls run one after the other so that one audit never holds two of the site's PHP workers.
+   * Resolves (never rejects) when every page has a speed result or has failed.
+   */
+  Widget.prototype.measureSpeed = function (data) {
+    var self = this;
+    function side(name) { return name === 'competitor' ? data.competitor : data; }
+    function step(name) {
+      if (self.data !== data || side(name).speed_done) { return Promise.resolve(); }
+      return api('POST', 'speed', { report_id: data.report_id, side: name }).then(function (speed) {
+        if (self.data !== data) { return; }
+        // Take only the page this call measured, and only forward: the answer's copy of the other page can be older.
+        var fresh = name === 'competitor' ? speed.competitor : speed;
+        if (fresh && fresh.speed_done && !side(name).speed_done) {
+          side(name).summary = fresh.summary;
+          side(name).speed_done = true;
+        }
+      }).catch(function () {
+        if (self.data !== data) { return; }
+        side(name).speed_done = true; // No result for this page: its Speed shows "Not measured".
+      }).then(function () {
+        if (self.data !== data) { return; }
+        self.renderSummary();
+        // The findings' area lines also said "Testing speed...".
+        if (data.checks) { self.renderFindings(); }
+      });
+    }
+    return step('mine').then(function () {
+      return data.competitor ? step('competitor') : null;
+    }).then(function () {
+      if (self.data === data && (data.checks || data.unlocked)) { self.loadFull(); }
     });
   };
 
@@ -225,7 +235,7 @@
       var group = summary.groups[key];
       var item = el('div', 'halo-audit__group');
       item.setAttribute('role', 'listitem');
-      item.appendChild(el('span', 'halo-audit__group-name', data.labels[key] || key));
+      item.appendChild(el('span', 'halo-audit__group-name', groupName(data, key)));
       var value;
       if (key === 'speed' && !data.speed_done) {
         value = 'Testing speed...';
@@ -239,7 +249,21 @@
       list.appendChild(item);
     });
     this.summaryBox.appendChild(list);
+    if (speedMeasured([data])) { this.summaryBox.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
   };
+
+  // Speed is Halo Audit's own score from three checks. Said wherever it sits near Google's own number.
+  var SPEED_NOTE = 'Speed is Halo Audit’s own score, not Google’s Performance score. It comes from three checks on ' +
+    'Google’s mobile lab test (Lighthouse): the Performance score, LCP and CLS, each Pass 100, Improve 50 or Fix 0, weighted 3, 2 and 2.';
+
+  function groupName(data, key) {
+    var name = data.labels[key] || key;
+    return key === 'speed' ? name + ' (Halo Audit score)' : name;
+  }
+
+  function speedMeasured(sides) {
+    return sides.some(function (s) { return s && s.speed_done && s.summary.groups.speed && s.summary.groups.speed.score !== null; });
+  }
 
   function groupScore(group, speedDone, key) {
     if (key === 'speed' && !speedDone) { return 'Testing speed...'; }
@@ -278,7 +302,7 @@
       var mine = data.summary.groups[key];
       var theirs = them.summary.groups[key];
       var row = el('tr');
-      var name = el('th', null, data.labels[key] || key); name.scope = 'row'; row.appendChild(name);
+      var name = el('th', null, groupName(data, key)); name.scope = 'row'; row.appendChild(name);
       row.appendChild(el('td', null, groupScore(mine, data.speed_done, key)));
       row.appendChild(el('td', null, groupScore(theirs, them.speed_done, key)));
       var diff = '';
@@ -305,6 +329,7 @@
     if (data.speed_done && them.speed_done && mineSpeed && theirSpeed && (mineSpeed.score === null) !== (theirSpeed.score === null)) {
       box.appendChild(el('p', 'halo-audit__note', 'Speed was measured for only one of the two pages, so the overall scores are not directly comparable.'));
     }
+    if (speedMeasured([data, them])) { box.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
   };
 
   Widget.prototype.renderActions = function () {
@@ -500,6 +525,7 @@
         section.appendChild(el('p', 'halo-audit__section-scores',
           'Your page: ' + groupScore(mine, data.speed_done, key) + ' \u00b7 Competitor page: ' + groupScore(theirs, data.competitor.speed_done, key)));
       }
+      if (key === 'speed' && speedMeasured([data, data.competitor])) { section.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
       groups[key].forEach(function (pair) {
         var item = el('div', 'halo-audit__check halo-audit__check--compare');
         item.setAttribute('data-check', pair.id);
@@ -531,6 +557,7 @@
       Object.keys(groups).forEach(function (key) {
         var section = el('section', 'halo-audit__section');
         section.appendChild(self.heading(1, 'halo-audit__section-title', data.labels[key] || key));
+        if (key === 'speed' && speedMeasured([data])) { section.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
         groups[key].forEach(function (row) {
           var item = el('div', 'halo-audit__check halo-audit__check--' + row.status);
           item.appendChild(el('span', 'halo-audit__badge', STATUS[row.status] || row.status));
@@ -556,17 +583,25 @@
     var self = this;
     if (button.disabled) { return; }
     button.disabled = true;
-    send('GET', 'report/' + this.data.report_id + '/pdf', null, false).then(function (response) {
+    var data = this.data;
+    var speedDone = data.speed_done && (!data.competitor || data.competitor.speed_done);
+    // The PDF is made from the stored report: wait for a running speed test so the PDF has its result.
+    var waits = !speedDone && !!this.speedRun;
+    if (waits) { this.say('Making the PDF once the speed test has finished...'); }
+    (waits ? this.speedRun : Promise.resolve()).then(function () {
+      return send('GET', 'report/' + data.report_id + '/pdf', null, false);
+    }).then(function (response) {
       if (!response.ok) { throw new Error('The PDF could not be made. Try again.'); }
       return response.blob();
     }).then(function (blob) {
       var link = el('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'halo-audit.pdf';
+      link.download = 'halo-audit.pdf'; // The same name the server sends in Content-Disposition.
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+      if (waits) { self.say('Audit complete. The score is below.'); }
     }).catch(function (error) { self.say(error.message, true); }).then(function () { button.disabled = false; });
   };
 

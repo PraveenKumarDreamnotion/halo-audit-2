@@ -10,7 +10,7 @@ final class PsiScore extends BaseCheck
     public const ID = 'psi_score';
     public const GROUP = 'speed';
     public const SEVERITY = 3;
-    public const TITLE = 'Mobile speed score';
+    public const TITLE = 'Google Performance score (mobile)';
     public const WHY = 'Most visitors arrive on a phone. A slow page loses them before they read anything.';
     public const FIX_WARN = 'Improve mobile speed. Start with large images, unused JavaScript and render-blocking files.';
     public const FIX_FAIL = 'The page is slow on a phone. Compress and resize images, remove unused JavaScript, and cache pages on the server.';
@@ -21,7 +21,7 @@ final class PsiScore extends BaseCheck
             return Result::notMeasured('Google PageSpeed did not return a result');
         }
         $score = $c->site->psi['score'];
-        $evidence = $score . ' out of 100 (Google PageSpeed, mobile)';
+        $evidence = $score . ' out of 100 (Google Lighthouse, mobile lab test)';
         if ($score >= 90) {
             return Result::pass($evidence);
         }

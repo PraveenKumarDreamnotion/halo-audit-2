@@ -21,7 +21,8 @@ final class Certificate extends BaseCheck
         if ($days === null) {
             return Result::notMeasured('The certificate could not be read');
         }
-        $evidence = $days < 0 ? 'Expired ' . abs($days) . ' day(s) ago' : $days . ' day(s) left';
+        $count = static fn(int $n): string => $n . ($n === 1 ? ' day' : ' days');
+        $evidence = $days < 0 ? 'Expired ' . $count(abs($days)) . ' ago' : $count($days) . ' left';
         if ($days >= 30) {
             return Result::pass($evidence);
         }

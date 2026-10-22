@@ -38,6 +38,12 @@ final class PsiClient
         if (!is_numeric($score) || !is_numeric($lcp) || !is_numeric($cls)) {
             return null;
         }
-        return ['score' => (int) round($score * 100), 'lcp_ms' => (float) $lcp, 'cls' => (float) $cls];
+        // Lighthouse gives the score from 0 to 1 and never a negative time or shift. Anything else is not a
+        // Lighthouse result, and an infinite value could not even be stored.
+        [$score, $lcp, $cls] = [(float) $score, (float) $lcp, (float) $cls];
+        if ($score < 0 || $score > 1 || !is_finite($lcp) || $lcp < 0 || !is_finite($cls) || $cls < 0) {
+            return null;
+        }
+        return ['score' => (int) round($score * 100), 'lcp_ms' => $lcp, 'cls' => $cls];
     }
 }

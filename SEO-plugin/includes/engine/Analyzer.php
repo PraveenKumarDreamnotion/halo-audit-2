@@ -5,6 +5,10 @@ final class Analyzer
 {
     public const VERSION = '2.0.1';
     private const SIDE_FILE_BUDGET_SECONDS = 10;
+    /** Evidence of a speed check whose PageSpeed test has not finished: not a failed test. */
+    public const SPEED_PENDING = 'The speed test had not finished yet';
+    /** Evidence of a speed check on a site with no PageSpeed key: Google was never asked. */
+    public const SPEED_OFF = 'Speed is not tested on this site';
 
     private Fetcher $fetcher;
     private CertProbe $cert;
@@ -60,6 +64,9 @@ final class Analyzer
             }
             $rows[] = self::row($check, $context);
         }
+        // PageSpeed runs later, in its own request. Until then the speed checks say so, rather than
+        // reading as if Google had failed.
+        $rows = self::speedEvidence($rows, self::SPEED_PENDING);
 
         return ['ok' => true, 'report' => [
             'engine_version' => self::VERSION,
@@ -94,6 +101,25 @@ final class Analyzer
         $report['speed_done'] = true;
         $report['summary'] = Scorer::score($report['checks']);
         return $report;
+    }
+
+    /** Closes the speed step without a test (no PageSpeed key): Not measured, and the evidence says why. */
+    public static function skipSpeed(array $report): array
+    {
+        $report['checks'] = self::speedEvidence($report['checks'], self::SPEED_OFF);
+        $report['speed_done'] = true;
+        return $report;
+    }
+
+    /** Sets the evidence of the speed checks that have no measurement. Measured rows are left alone. */
+    private static function speedEvidence(array $rows, string $evidence): array
+    {
+        foreach ($rows as $i => $row) {
+            if ($row['group'] === 'speed' && $row['status'] === Result::NOT_MEASURED) {
+                $rows[$i]['evidence'] = $evidence;
+            }
+        }
+        return $rows;
     }
 
     private static function row(Check $check, Context $context): array

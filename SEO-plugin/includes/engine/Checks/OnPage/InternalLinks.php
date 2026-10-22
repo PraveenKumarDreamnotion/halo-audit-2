@@ -18,7 +18,7 @@ final class InternalLinks extends BaseCheck
     public function run(Context $c): Result
     {
         $n = count(array_filter($c->page->links(), static fn(array $l): bool => $l['internal']));
-        $evidence = $n . ' internal link(s)';
+        $evidence = $n . ($n === 1 ? ' internal link' : ' internal links');
         if ($n >= 2) {
             return Result::pass($evidence);
         }

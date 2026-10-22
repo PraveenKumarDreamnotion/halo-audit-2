@@ -177,19 +177,21 @@ class Halo_Compare_Findings_Speed_Test extends WP_UnitTestCase
             'competitor' => ['url' => self::THEIRS, 'is_education' => false, 'speed_done' => true, 'checks' => $theirs, 'summary' => $summary(67)]];
         $html = Pdf::html($report);
 
-        preg_match_all('#<tr><td><strong>Title ([a-z_]+)</strong></td><td class="mine">(.*?)</td><td class="theirs">(.*?)</td></tr>#s', $html, $rows, PREG_SET_ORDER);
+        $rows = Halo_Pdf_Rows::comparison($html);
         $this->assertCount(6, $rows);
-        foreach ($rows as [, $id, $mineCell, $theirCell]) {
-            $this->assertStringNotContainsString('THEIRS-', $mineCell, $id);
+        $byId = [];
+        foreach ($rows as $title => [$mineCell, $theirCell, $fix]) {
+            $id = substr($title, strlen('Title '));
+            $this->assertStringNotContainsString('THEIRS-', $mineCell . $fix, $id);
             $this->assertStringNotContainsString('MINE-', $theirCell, $id);
             $this->assertStringNotContainsString('What to do', $theirCell, $id);
+            $byId[$id] = ['mine' => $mineCell, 'theirs' => $theirCell];
         }
-        $byId = array_column(array_map(static fn($r) => ['id' => $r[1], 'mine' => $r[2], 'theirs' => $r[3]], $rows), null, 'id');
         $this->assertStringContainsString('MINE-meta_description', $byId['meta_description']['mine']);
         $this->assertStringContainsString('THEIRS-meta_description', $byId['meta_description']['theirs']);
         $this->assertStringContainsString('Not checked', $byId['edu_programs']['theirs']);
         $this->assertStringContainsString('Not checked', $byId['theirs_only']['mine']);
-        $this->assertStringContainsString('Your page: 50 / 100 &nbsp; Competitor page: 67 / 100', $html);
+        $this->assertStringContainsString('Your page 50 / 100 &middot; competitor 67 / 100</span>', $html);
     }
 
     /* Speed: mapping and independence */
@@ -204,8 +206,8 @@ class Halo_Compare_Findings_Speed_Test extends WP_UnitTestCase
 
         $this->assertSame(100, $full['summary']['groups']['speed']['score']);
         $this->assertSame(64, $full['competitor']['summary']['groups']['speed']['score']);
-        $this->assertSame('95 out of 100 (Google PageSpeed, mobile)', self::check($full['checks'], 'psi_score')['evidence']);
-        $this->assertSame('70 out of 100 (Google PageSpeed, mobile)', self::check($full['competitor']['checks'], 'psi_score')['evidence']);
+        $this->assertSame('95 out of 100 (Google Lighthouse, mobile lab test)', self::check($full['checks'], 'psi_score')['evidence']);
+        $this->assertSame('70 out of 100 (Google Lighthouse, mobile lab test)', self::check($full['competitor']['checks'], 'psi_score')['evidence']);
         $this->assertSame('3.0 seconds', self::check($full['competitor']['checks'], 'lcp')['evidence']);
         $this->assertSame(Scorer::WEIGHTS['speed'], 20, 'Speed is 20 of the 100 overall weight.');
     }

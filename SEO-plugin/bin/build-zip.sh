@@ -54,15 +54,23 @@ else
 fi
 mv "$work/SEO-plugin" "$work/seo-analyzer"
 [ -f "$work/seo-analyzer/seo-analyzer.php" ] || { echo "The plugin files were not exported" >&2; exit 1; }
+# Files the PDF needs. A file on disk that git does not track is left out of the export above, and the ZIP
+# would then fail on the first PDF download (Pdf.php needs PdfFonts.php), so stop here instead.
+for required in includes/engine/Wp/PdfFonts.php licenses/FreeFont-GPL-3.0-with-font-exception.txt; do
+    [ -f "$work/seo-analyzer/$required" ] || { echo "$required was not exported: add it to git before building" >&2; exit 1; }
+done
 
 # ext-gd is needed on the web server, not on the build machine.
 composer install --working-dir="$work/seo-analyzer" --no-dev --optimize-autoloader --no-interaction --no-progress --ignore-platform-req=ext-gd
 
-# The PDF uses the DejaVu Sans family only (see Pdf::css). mPDF ships about 80 MB of other fonts
-# that are never loaded; leaving them out keeps the ZIP under common upload limits.
+# The PDF uses the DejaVu Sans family, and FreeSans (GNU FreeFont, regular face only) for Devanagari
+# text (see Wp/PdfFonts.php). mPDF ships about 80 MB of other fonts that are never loaded; leaving
+# them out keeps the ZIP under common upload limits.
 fonts="$work/seo-analyzer/vendor/mpdf/mpdf/ttfonts"
-[ -f "$fonts/DejaVuSans.ttf" ] || { echo "DejaVuSans.ttf is missing from mPDF" >&2; exit 1; }
-find "$fonts" -type f ! -name 'DejaVu*' -delete
+for font in DejaVuSans.ttf FreeSans.ttf; do
+  [ -f "$fonts/$font" ] || { echo "$font is missing from mPDF" >&2; exit 1; }
+done
+find "$fonts" -type f ! -name 'DejaVu*' ! -name 'FreeSans.ttf' -delete
 
 # Not needed at run time. composer.lock pins the build above, so it is removed only after install.
 rm -f "$work/seo-analyzer/composer.lock"

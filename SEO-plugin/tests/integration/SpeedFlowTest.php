@@ -130,16 +130,20 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
         $this->assertSame($speed, $full['summary']['groups']['speed']['score']);
 
         $html = Pdf::html($stored);
-        $this->assertStringContainsString('<tr><td>Speed</td><td>' . $speed . '</td>', $html);
-        foreach ($expectedRows as [, $evidence]) {
-            $this->assertStringContainsString(htmlspecialchars($evidence), $html);
+        $this->assertMatchesRegularExpression('#<div class="c-name">Speed \(Halo Audit\)</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-score">' . $speed . '<span class="c-of"> / 100</span></div>#s', $html);
+        $this->assertStringContainsString('<td class="halo halo-score">' . $speed . ' / 100</td>', $html);
+        foreach ($expectedRows as $check => [, $evidence]) {
+            // The Lighthouse value is printed as "N / 100": its row already names Google Lighthouse and the range.
+            $shown = $check === 'psi_score' ? Pdf::lighthouseValue($evidence) : $evidence;
+            $this->assertStringContainsString(' <span class="evidence">' . htmlspecialchars($shown) . '</span>', $html, $check);
         }
+        $this->assertMatchesRegularExpression('#^\d{1,3} / 100$#', Pdf::lighthouseValue($expectedRows['psi_score'][1]));
         $this->assertSame(1, $this->psiCalls());
     }
 
     public function targets(): array
     {
-        $r = static fn($ps, $pe, $ls, $le, $cs, $ce) => ['psi_score' => [$ps, $pe . ' out of 100 (Google PageSpeed, mobile)'], 'lcp' => [$ls, $le], 'cls' => [$cs, $ce]];
+        $r = static fn($ps, $pe, $ls, $le, $cs, $ce) => ['psi_score' => [$ps, $pe . ' out of 100 (Google Lighthouse, mobile lab test)'], 'lcp' => [$ls, $le], 'cls' => [$cs, $ce]];
         return [
             // Lighthouse, LCP ms, CLS => statuses => Speed. Arithmetic in the trailing comments.
             '0: fix fix fix' => [0.31, 6120, 0.41, $r('fail', 31, 'fail', '6.1 seconds', 'fail', '0.41'), 0],
@@ -209,7 +213,11 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
         foreach (self::speedRows($stored['checks']) as $id => [$status, $evidence]) {
             $this->assertSame(['not_measured', 'Google PageSpeed did not return a result'], [$status, $evidence], $id);
         }
-        $this->assertStringContainsString('<tr><td>Speed</td><td>Not measured</td>', Pdf::html($stored));
+        $html = Pdf::html($stored);
+        $this->assertMatchesRegularExpression('#<div class="c-name">Speed \(Halo Audit\)</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-none">Not measured</div>#s', $html);
+        // A "Not measured" reason is printed as stored, never turned into a number.
+        $this->assertStringContainsString('<span class="chip chip-not_measured">○ Not measured</span> <span class="evidence">Google PageSpeed did not return a result</span>', $html);
+        $this->assertStringContainsString('<td class="halo halo-score">Not measured</td>', $html);
     }
 
     public function unavailable(): array
