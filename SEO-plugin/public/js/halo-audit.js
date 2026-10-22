@@ -5,6 +5,11 @@
   var nonce = null;
   var widgets = [];
   var STATUS = { pass: 'Pass', warn: 'Improve', fail: 'Fix', not_measured: 'Not measured' };
+  /* The order a check takes in its area: what to fix first, then what to improve, then what could not be measured. */
+  var ATTENTION = { fail: 0, warn: 1, not_measured: 2, pass: 3 };
+  var TOP_FIXES = 5;
+  var DONE = 'Audit complete.';
+  var SPEED_PENDING = 'Page read. The speed test is still running. It takes up to 90 seconds.';
 
   function route(path) {
     var parts = path.split('?');
@@ -148,7 +153,7 @@
     if (this.root.getAttribute('data-form-page')) { body.form_page = this.root.getAttribute('data-form-page'); }
     api('POST', 'analyze', body).then(function (data) {
       self.data = data;
-      self.say('Audit complete. The score is below.');
+      self.say(data.speed_done && (!data.competitor || data.competitor.speed_done) ? DONE : SPEED_PENDING);
       self.render();
       self.setState('preview');
       if (data.unlocked) { self.loadFull(); }
@@ -194,7 +199,9 @@
     return step('mine').then(function () {
       return data.competitor ? step('competitor') : null;
     }).then(function () {
-      if (self.data === data && (data.checks || data.unlocked)) { self.loadFull(); }
+      if (self.data !== data) { return; }
+      if (self.status.textContent === SPEED_PENDING) { self.say(DONE); }
+      if (data.checks || data.unlocked) { self.loadFull(); }
     });
   };
 
@@ -220,7 +227,10 @@
     clear(this.summaryBox);
     if (data.competitor) { this.renderComparison(); return; }
 
-    this.summaryBox.appendChild(el('p', 'halo-audit__url', data.url));
+    var meta = el('p', 'halo-audit__url');
+    meta.appendChild(el('strong', null, data.url));
+    if (data.keyword) { meta.appendChild(document.createTextNode(' \u00b7 keyword \u201c' + data.keyword + '\u201d')); }
+    this.summaryBox.appendChild(meta);
     var score = el('div', 'halo-audit__score');
     var number = el('span', 'halo-audit__score-number', summary.overall === null ? 'Not measured' : summary.overall);
     score.appendChild(number);
@@ -236,16 +246,21 @@
       var item = el('div', 'halo-audit__group');
       item.setAttribute('role', 'listitem');
       item.appendChild(el('span', 'halo-audit__group-name', groupName(data, key)));
-      var value;
-      if (key === 'speed' && !data.speed_done) {
-        value = 'Testing speed...';
+      var pending = key === 'speed' && !data.speed_done;
+      var value = el('span', 'halo-audit__group-score');
+      if (pending) {
+        value.textContent = 'Testing\u2026';
+        value.classList.add('halo-audit__group-score--muted');
       } else if (group.score === null) {
-        value = 'Not measured';
+        value.textContent = 'Not measured';
+        value.classList.add('halo-audit__group-score--muted');
       } else {
-        value = group.score + ' / 100';
+        value.textContent = group.score;
+        value.appendChild(el('small', null, '/ 100'));
       }
-      item.appendChild(el('span', 'halo-audit__group-score', value));
-      item.appendChild(el('span', 'halo-audit__group-counts', group.pass + ' pass, ' + group.warn + ' to improve, ' + group.fail + ' to fix'));
+      item.appendChild(value);
+      if (!pending && group.score !== null) { item.appendChild(bar(group.score)); }
+      item.appendChild(el('span', 'halo-audit__group-counts', pending ? 'Takes up to 90 seconds.' : counts(group)));
       list.appendChild(item);
     });
     this.summaryBox.appendChild(list);
@@ -258,7 +273,26 @@
 
   function groupName(data, key) {
     var name = data.labels[key] || key;
-    return key === 'speed' ? name + ' (Halo Audit score)' : name;
+    return key === 'speed' ? name + ' (mobile)' : name;
+  }
+
+  /* "5 to fix \u00b7 1 to improve \u00b7 6 pass", leaving out the counts that are zero. */
+  function counts(group) {
+    var parts = [];
+    if (group.fail) { parts.push(group.fail + ' to fix'); }
+    if (group.warn) { parts.push(group.warn + ' to improve'); }
+    if (group.pass) { parts.push(group.pass + ' pass'); }
+    return parts.length ? parts.join(' \u00b7 ') : 'No result';
+  }
+
+  /* A score bar. Decorative: the number beside it says the same. */
+  function bar(score) {
+    var track = el('span', 'halo-audit__bar');
+    track.setAttribute('aria-hidden', 'true');
+    var fill = el('span', 'halo-audit__bar-fill');
+    fill.style.width = Math.max(0, Math.min(100, score)) + '%';
+    track.appendChild(fill);
+    return track;
   }
 
   function speedMeasured(sides) {
@@ -552,23 +586,29 @@
     if (data.competitor && data.pairs) {
       this.renderComparisonFindings();
     } else {
+      this.renderTopFixes();
       var groups = {};
       data.checks.forEach(function (row) { (groups[row.group] = groups[row.group] || []).push(row); });
       Object.keys(groups).forEach(function (key) {
         var section = el('section', 'halo-audit__section');
-        section.appendChild(self.heading(1, 'halo-audit__section-title', data.labels[key] || key));
+        var title = self.heading(1, 'halo-audit__section-title', groupName(data, key));
+        var group = data.summary.groups[key];
+        var meta = (group ? groupScore(group, data.speed_done, key) : 'Not scored') + ' \u00b7 ' + groups[key].length + (groups[key].length === 1 ? ' check' : ' checks');
+        title.appendChild(el('span', 'halo-audit__section-meta', meta));
+        section.appendChild(title);
         if (key === 'speed' && speedMeasured([data])) { section.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
-        groups[key].forEach(function (row) {
-          var item = el('div', 'halo-audit__check halo-audit__check--' + row.status);
-          item.appendChild(el('span', 'halo-audit__badge', STATUS[row.status] || row.status));
-          var body = el('div', 'halo-audit__check-body');
-          body.appendChild(el('strong', 'halo-audit__check-title', row.title));
-          if (row.evidence) { body.appendChild(el('p', 'halo-audit__evidence', row.evidence)); }
-          if (row.message) { body.appendChild(el('p', 'halo-audit__fix', row.message)); }
-          body.appendChild(el('p', 'halo-audit__why', row.why));
-          item.appendChild(body);
-          section.appendChild(item);
+        var rows = groups[key].slice().sort(function (a, b) {
+          return (ATTENTION[a.status] === undefined ? 2 : ATTENTION[a.status]) - (ATTENTION[b.status] === undefined ? 2 : ATTENTION[b.status]);
         });
+        var passed = rows.filter(function (row) { return row.status === 'pass'; });
+        rows.filter(function (row) { return row.status !== 'pass'; }).forEach(function (row) { section.appendChild(check(row, true)); });
+        if (passed.length) {
+          // The passed checks are folded away: the open list is what needs work.
+          var fold = el('details', 'halo-audit__passed');
+          fold.appendChild(el('summary', null, passed.length + (passed.length === 1 ? ' check passed' : ' checks passed')));
+          passed.forEach(function (row) { fold.appendChild(check(row, false)); });
+          section.appendChild(fold);
+        }
         box.appendChild(section);
       });
     }
@@ -577,6 +617,70 @@
     scan.appendChild(self.heading(1, 'halo-audit__section-title', 'Live AI visibility'));
     scan.appendChild(el('p', null, 'Coming soon. This will show whether ChatGPT, Gemini and Google AI Overviews name your organisation.'));
     box.appendChild(scan);
+    this.renderCta();
+  };
+
+  /* One finding. With detail, the "What to do" row and the reason; a passed check shows its result only. */
+  function check(row, detail) {
+    var item = el('div', 'halo-audit__check halo-audit__check--' + row.status);
+    item.appendChild(el('span', 'halo-audit__badge', STATUS[row.status] || row.status));
+    var body = el('div', 'halo-audit__check-body');
+    body.appendChild(el('strong', 'halo-audit__check-title', row.title));
+    if (row.evidence) { body.appendChild(el('p', 'halo-audit__evidence', row.evidence)); }
+    if (detail && row.message) {
+      var fix = el('p', 'halo-audit__fix');
+      fix.appendChild(el('strong', null, 'What to do: '));
+      fix.appendChild(document.createTextNode(row.message));
+      body.appendChild(fix);
+    }
+    if (detail && row.why) { body.appendChild(el('p', 'halo-audit__why', row.why)); }
+    item.appendChild(body);
+    return item;
+  }
+
+  /*
+   * "Fix these first": the Fix results, then the Improve results, of the scored areas. Within each, the checks
+   * that weigh most come first: the check's severity times its area's share of the score.
+   */
+  Widget.prototype.renderTopFixes = function () {
+    var data = this.data;
+    var weight = { onpage: 30, technical: 20, ai: 30, speed: 20 };
+    var rows = data.checks.filter(function (row) {
+      return (row.status === 'fail' || row.status === 'warn') && weight[row.group] && row.message;
+    }).sort(function (a, b) {
+      return (ATTENTION[a.status] - ATTENTION[b.status]) ||
+        ((b.severity || 1) * weight[b.group] - (a.severity || 1) * weight[a.group]);
+    }).slice(0, TOP_FIXES);
+    if (!rows.length) { return; }
+    var section = el('section', 'halo-audit__section halo-audit__top');
+    section.appendChild(this.heading(1, 'halo-audit__section-title', 'Fix these first'));
+    var list = el('ol', 'halo-audit__top-list');
+    rows.forEach(function (row) {
+      var item = el('li', 'halo-audit__check--' + row.status);
+      var text = el('span', 'halo-audit__top-text');
+      text.appendChild(el('strong', null, row.title));
+      text.appendChild(el('span', 'halo-audit__top-area', groupName(data, row.group)));
+      item.appendChild(text);
+      item.appendChild(el('span', 'halo-audit__badge', STATUS[row.status]));
+      list.appendChild(item);
+    });
+    section.appendChild(list);
+    this.findings.appendChild(section);
+  };
+
+  /* The site's closing block, from the shortcode's cta_* attributes. None without a link. */
+  Widget.prototype.renderCta = function () {
+    var url = this.root.getAttribute('data-cta-url');
+    if (!url || !/^https?:\/\//i.test(url)) { return; }
+    var box = el('div', 'halo-audit__cta');
+    var title = this.root.getAttribute('data-cta-title');
+    var text = this.root.getAttribute('data-cta-text');
+    if (title) { box.appendChild(this.heading(1, 'halo-audit__cta-title', title)); }
+    if (text) { box.appendChild(el('p', 'halo-audit__cta-text', text)); }
+    var link = el('a', 'halo-audit__button', this.root.getAttribute('data-cta-button') || 'Talk to us');
+    link.href = url;
+    box.appendChild(link);
+    this.findings.appendChild(box);
   };
 
   Widget.prototype.downloadPdf = function (button) {
@@ -601,7 +705,7 @@
       link.click();
       link.remove();
       setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
-      if (waits) { self.say('Audit complete. The score is below.'); }
+      if (waits) { self.say(DONE); }
     }).catch(function (error) { self.say(error.message, true); }).then(function () { button.disabled = false; });
   };
 
