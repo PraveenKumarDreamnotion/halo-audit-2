@@ -381,7 +381,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
     {
         [$id, $full] = $this->compare();
         // Zero-width spaces are the PDF's line-break points in long text; they are not part of the text.
-        $html = str_replace("\u{200B}", '', Pdf::html(Plugin::store()->get($id)['report']));
+        $html = str_replace(["\u{200B}", '<br />'], '', Pdf::html(Plugin::store()->get($id)['report']));
         $labels = ['pass' => '✓ Pass', 'warn' => '! Improve', 'fail' => '✗ Fix', 'not_measured' => '○ Not measured'];
         $e = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
@@ -404,8 +404,8 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         }
         // Overall scores: the numbers in the two score rings, then each page's grade beside its ring.
         $this->assertSame(['87', '29'], Halo_Pdf_Rows::rings($html));
-        $this->assertMatchesRegularExpression('#<div class="sp-label">Your page</div><div class="sp-host">[^<]+</div><div class="sp-of">[^<]+</div><div class="grade grade-b">Grade B</div>#', $html);
-        $this->assertMatchesRegularExpression('#<div class="sp-label">Competitor</div><div class="sp-host">[^<]+</div><div class="sp-of">[^<]+</div><div class="grade grade-f">Grade F</div>#', $html);
+        $this->assertMatchesRegularExpression('#<div class="sp-label">Your page</div><div class="sp-host">[^<]+</div><div class="sp-of">[^<]+</div><div style="font-size:3pt;line-height:1">&nbsp;</div><div class="grade grade-b">Grade B</div>#', $html);
+        $this->assertMatchesRegularExpression('#<div class="sp-label">Competitor</div><div class="sp-host">[^<]+</div><div class="sp-of">[^<]+</div><div style="font-size:3pt;line-height:1">&nbsp;</div><div class="grade grade-f">Grade F</div>#', $html);
         foreach (self::MINE_GROUPS as $g => [$score]) {
             $theirs = self::THEIRS_GROUPS[$g][0];
             // Each area's card on page 1: your score, then the competitor's.
@@ -423,7 +423,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
         $this->call('POST', '/speed', ['report_id' => $id]);
         $this->unlock();
         $full = $this->call('GET', '/report/' . $id)->get_data();
-        $html = str_replace("\u{200B}", '', Pdf::html(Plugin::store()->get($id)['report']));
+        $html = str_replace(["\u{200B}", '<br />'], '', Pdf::html(Plugin::store()->get($id)['report']));
         $labels = ['pass' => '✓ Pass', 'warn' => '! Improve', 'fail' => '✗ Fix', 'not_measured' => '○ Not measured'];
         $e = static fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 
@@ -435,7 +435,7 @@ class Halo_Accuracy_Test extends WP_UnitTestCase
             $this->assertSame([$labels[$row['status']], $e($shown), $e($row['message'])], $rows[$e($row['title'])] ?? null, $row['id']);
         }
         $this->assertSame(['87'], Halo_Pdf_Rows::rings($html));
-        $this->assertMatchesRegularExpression('#<div class="sp-label">Overall score</div><div class="sp-host">[^<]+</div><div class="sp-of">out of 100</div><div class="grade grade-b">Grade B</div>#', $html);
+        $this->assertMatchesRegularExpression('#<div class="sp-label">Overall score</div><div class="sp-host">[^<]+</div><div class="sp-of">out of 100</div><div style="font-size:3pt;line-height:1">&nbsp;</div><div class="grade grade-b">Grade B</div>#', $html);
     }
 
     /* Speed: thresholds and rounding, worked out by hand */

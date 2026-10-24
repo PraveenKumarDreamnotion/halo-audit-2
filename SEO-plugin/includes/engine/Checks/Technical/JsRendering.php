@@ -4,6 +4,7 @@ namespace HaloAudit\Checks\Technical;
 use HaloAudit\BaseCheck;
 use HaloAudit\Context;
 use HaloAudit\Result;
+use HaloAudit\Text;
 
 final class JsRendering extends BaseCheck
 {
@@ -18,7 +19,7 @@ final class JsRendering extends BaseCheck
     public function run(Context $c): Result
     {
         $n = $c->page->wordCount();
-        $evidence = $n . ' words in the first HTML response';
+        $evidence = Text::number($n) . ' words in the first HTML response';
         if ($n >= 200) {
             return Result::pass($evidence);
         }

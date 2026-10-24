@@ -59,7 +59,8 @@ final class Shortcode
         // Without cta_url there is no block. The plugin itself names no site.
         $cta = '';
         $ctaUrl = esc_url((string) $atts['cta_url'], ['http', 'https']);
-        if ($ctaUrl !== '') {
+        // An absolute web address only: esc_url() keeps a relative path such as "/contact/".
+        if ($ctaUrl !== '' && preg_match('#^https?://#i', $ctaUrl)) {
             $cta = ' data-cta-url="' . esc_attr($ctaUrl) . '"';
             foreach (['cta_title' => 'data-cta-title', 'cta_text' => 'data-cta-text', 'cta_button' => 'data-cta-button'] as $key => $attr) {
                 $value = trim((string) $atts[$key]);

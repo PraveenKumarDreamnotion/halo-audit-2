@@ -130,7 +130,7 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
         $this->assertSame($speed, $full['summary']['groups']['speed']['score']);
 
         $html = Pdf::html($stored);
-        $this->assertMatchesRegularExpression('#<div class="c-name">Speed \(Halo Audit\)</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-score">' . $speed . '<span class="c-of"> / 100</span></div>#s', $html);
+        $this->assertMatchesRegularExpression('#<div class="c-name">Speed</div><div style="font-size:3pt;line-height:1">&nbsp;</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-score">' . $speed . '<span class="c-of"> / 100</span></div>#s', $html);
         $this->assertStringContainsString('<td class="halo halo-score">' . $speed . ' / 100</td>', $html);
         foreach ($expectedRows as $check => [, $evidence]) {
             // The Lighthouse value is printed as "N / 100": its row already names Google Lighthouse and the range.
@@ -214,9 +214,9 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
             $this->assertSame(['not_measured', 'Google PageSpeed did not return a result'], [$status, $evidence], $id);
         }
         $html = Pdf::html($stored);
-        $this->assertMatchesRegularExpression('#<div class="c-name">Speed \(Halo Audit\)</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-none">Not measured</div>#s', $html);
+        $this->assertMatchesRegularExpression('#<div class="c-name">Speed</div><div style="font-size:3pt;line-height:1">&nbsp;</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-none">Not measured</div>#s', $html);
         // A "Not measured" reason is printed as stored, never turned into a number.
-        $this->assertStringContainsString('<span class="chip chip-not_measured">○ Not measured</span> <span class="evidence">Google PageSpeed did not return a result</span>', $html);
+        $this->assertStringContainsString('<span class="chip chip-not_measured"><span class="fb">○</span> Not measured</span> <span class="evidence">Google PageSpeed did not return a result</span>', $html);
         $this->assertStringContainsString('<td class="halo halo-score">Not measured</td>', $html);
     }
 
@@ -259,7 +259,7 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
 
         $early = $this->call('GET', '/report/' . $id)->get_data();
         $this->assertFalse($early['speed_done']);
-        $this->assertNull($early['summary']['groups']['speed']['score'], 'Before the test: no number, the page shows "Testing speed...".');
+        $this->assertNull($early['summary']['groups']['speed']['score'], 'Before the test: no number, the page shows "Testing…".');
         $this->assertSame(['not_measured', 'not_measured', 'not_measured'], array_column(self::speedRows($early['checks']), 0));
 
         $this->call('POST', '/speed', ['report_id' => $id]);
@@ -290,6 +290,112 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
 
         $two = $this->call('POST', '/speed', ['report_id' => $id])->get_data();
         $this->assertSame([50, 86], [$two['summary']['groups']['speed']['score'], $two['competitor']['summary']['groups']['speed']['score']]);
+        $this->assertSame(2, $this->psiCalls());
+    }
+
+    /* A failed speed test and "Try the speed test again" */
+
+    public function test_a_failed_test_is_reported_as_failed_and_a_retry_measures_that_page_once_more(): void
+    {
+        $this->psi[self::MINE] = self::answer(500, '{"error":{"code":500}}');
+        $id = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'speed'])->get_data()['report_id'];
+        $first = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine'])->get_data();
+        $this->assertSame([true, true, null], [$first['speed_done'], $first['speed_failed'], $first['summary']['groups']['speed']['score']]);
+        $stored = Plugin::store()->get($id)['report'];
+        $this->assertTrue(Analyzer::speedFailed($stored));
+        $html = Pdf::html($stored);
+        $this->assertStringContainsString('Page audit complete, speed test failed', $html);
+        $this->assertStringContainsString('The speed test did not return a result, so Speed is not measured.', $html);
+        $this->assertStringNotContainsString('Analysis complete', $html);
+
+        // A plain repeat (no retry) still never measures again.
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
+        $this->assertSame(1, $this->psiCalls());
+
+        $this->psi[self::MINE] = self::lighthouse(0.88, 2050, 0.02); // 79
+        $others = count(array_filter($this->requested, static fn($u) => strpos($u, 'pagespeedonline') === false));
+        $retried = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true])->get_data();
+        $this->assertSame([true, false, 79], [$retried['speed_done'], $retried['speed_failed'], $retried['summary']['groups']['speed']['score']]);
+        $this->assertSame(2, $this->psiCalls());
+        $this->assertStringContainsString('Analysis complete', Pdf::html(Plugin::store()->get($id)['report']));
+
+        // Once there is a result, a retry answers with it and does not call Google again.
+        $this->psi[self::MINE] = self::lighthouse(0.31, 6120, 0.41);
+        $again = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true])->get_data();
+        $this->assertSame(79, $again['summary']['groups']['speed']['score']);
+        $this->assertSame(2, $this->psiCalls());
+        // The audit itself was not run again: the retries requested PageSpeed and nothing else.
+        $this->assertSame($others, count(array_filter($this->requested, static fn($u) => strpos($u, 'pagespeedonline') === false)));
+    }
+
+    public function test_a_retry_that_fails_again_stays_failed_and_a_retry_never_runs_without_a_key(): void
+    {
+        $this->psi[self::MINE] = new WP_Error('http_request_failed', 'cURL error 28: timed out');
+        $id = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'speed'])->get_data()['report_id'];
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
+        $again = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true])->get_data();
+        $this->assertSame([true, true, null], [$again['speed_done'], $again['speed_failed'], $again['summary']['groups']['speed']['score']]);
+        $this->assertSame(2, $this->psiCalls());
+
+        delete_option('halo_audit_psi_key');
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true]);
+        $this->assertSame(2, $this->psiCalls(), 'No key: no request to Google.');
+    }
+
+    public function test_a_site_without_a_key_is_not_a_failed_test(): void
+    {
+        delete_option('halo_audit_psi_key');
+        $data = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'speed'])->get_data();
+        $this->assertSame([true, false], [$data['speed_done'], $data['speed_failed']]);
+        $this->assertStringContainsString('Analysis complete', Pdf::html(Plugin::store()->get($data['report_id'])['report']));
+    }
+
+    public function test_a_retry_for_the_competitor_measures_only_the_competitor(): void
+    {
+        $this->psi[self::MINE] = self::lighthouse(0.75, 4300, 0.0); // 50
+        $this->psi[self::THEIRS] = self::answer(429, '{"error":{"code":429}}');
+        $id = $this->call('POST', '/analyze', ['url' => self::MINE, 'competitor_url' => self::THEIRS, 'keyword' => 'speed'])->get_data()['report_id'];
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
+        $two = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'competitor'])->get_data();
+        $this->assertSame([false, true], [$two['speed_failed'], $two['competitor']['speed_failed']]);
+        $this->assertStringContainsString('Competitor page: the speed test did not return a result', Pdf::html(Plugin::store()->get($id)['report']));
+
+        // A retry for your page (which has its result) measures nothing.
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true]);
+        $this->assertSame(2, $this->psiCalls());
+
+        $this->psi[self::THEIRS] = self::lighthouse(0.91, 3350, 0.08); // 86
+        $three = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'competitor', 'retry' => true])->get_data();
+        $this->assertSame([50, 86], [$three['summary']['groups']['speed']['score'], $three['competitor']['summary']['groups']['speed']['score']]);
+        $this->assertSame(3, $this->psiCalls());
+    }
+
+    /** While one test for a page runs, a second call for that page is refused and measures nothing. */
+    public function test_a_second_test_for_the_same_page_while_one_runs_gets_409(): void
+    {
+        $this->psi[self::MINE] = self::answer(500, '');
+        $id = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'speed'])->get_data()['report_id'];
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
+
+        global $wpdb;
+        $lock = 'halo_audit_speed_lock_' . md5($id . '|mine');
+        $row = static fn() => $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $lock));
+        // This request has cached the lock as absent; another request then takes it, straight in the table. The
+        // lock must be decided by the table, not by this request's options cache.
+        get_option($lock);
+        $wpdb->insert($wpdb->options, ['option_name' => $lock, 'option_value' => (string) time(), 'autoload' => 'no']);
+        $busy = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true]);
+        $this->assertSame(409, $busy->get_status());
+        $this->assertSame(1, $this->psiCalls());
+        $this->assertNotNull($row(), 'The other request\'s lock is left alone.');
+
+        // A lock left by a request that died is taken over.
+        $wpdb->update($wpdb->options, ['option_value' => (string) (time() - 600)], ['option_name' => $lock]);
+        $this->psi[self::MINE] = self::lighthouse(0.97, 1620, 0.01);
+        $ok = $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine', 'retry' => true]);
+        $this->assertSame(200, $ok->get_status());
+        $this->assertSame(100, $ok->get_data()['summary']['groups']['speed']['score']);
+        $this->assertNull($row(), 'The lock is released after the test.');
         $this->assertSame(2, $this->psiCalls());
     }
 }

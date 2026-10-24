@@ -4,6 +4,7 @@ namespace HaloAudit\Checks\OnPage;
 use HaloAudit\BaseCheck;
 use HaloAudit\Context;
 use HaloAudit\Result;
+use HaloAudit\Text;
 
 final class WordCount extends BaseCheck
 {
@@ -18,7 +19,7 @@ final class WordCount extends BaseCheck
     public function run(Context $c): Result
     {
         $n = $c->page->wordCount();
-        $evidence = $n . ' words';
+        $evidence = Text::number($n) . ' words';
         if ($n >= 300) {
             return Result::pass($evidence);
         }

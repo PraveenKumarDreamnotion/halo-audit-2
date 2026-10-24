@@ -56,7 +56,12 @@ mv "$work/SEO-plugin" "$work/seo-analyzer"
 [ -f "$work/seo-analyzer/seo-analyzer.php" ] || { echo "The plugin files were not exported" >&2; exit 1; }
 # Files the PDF needs. A file on disk that git does not track is left out of the export above, and the ZIP
 # would then fail on the first PDF download (Pdf.php needs PdfFonts.php), so stop here instead.
-for required in includes/engine/Wp/PdfFonts.php licenses/FreeFont-GPL-3.0-with-font-exception.txt; do
+# The logos and brand fonts are checked too: without them a branded PDF quietly falls back to the text mark and
+# DejaVu (see Pdf::logo() and Pdf::brandFonts()), which is easy to miss.
+for required in includes/engine/Wp/PdfFonts.php licenses/FreeFont-GPL-3.0-with-font-exception.txt \
+    assets/images/logo-white.png assets/images/logo-dark.png \
+    assets/fonts/Lato-Regular.ttf assets/fonts/Lato-Bold.ttf assets/fonts/Lato-Italic.ttf \
+    assets/fonts/Oswald-Medium.ttf assets/fonts/Oswald-SemiBold.ttf assets/fonts/Oswald-Bold.ttf; do
     [ -f "$work/seo-analyzer/$required" ] || { echo "$required was not exported: add it to git before building" >&2; exit 1; }
 done
 

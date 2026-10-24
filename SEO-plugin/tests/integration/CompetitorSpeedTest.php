@@ -324,7 +324,7 @@ class Halo_Competitor_Speed_Test extends WP_UnitTestCase
         $id = $this->compare();
         $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
         $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'competitor']);
-        $html = str_replace("\u{200B}", '', Pdf::html(Plugin::store()->get($id)['report']));
+        $html = str_replace(["\u{200B}", '<br />'], '', Pdf::html(Plugin::store()->get($id)['report']));
 
         $cells = Halo_Pdf_Rows::comparison($html);
         $expect = [
@@ -339,7 +339,7 @@ class Halo_Competitor_Speed_Test extends WP_UnitTestCase
             $this->assertStringNotContainsString($theirs, $cells[$title][0], $title);
         }
         // Page 1's Speed card: your page's Halo Audit Speed score, then the competitor's.
-        $this->assertMatchesRegularExpression('#<div class="c-name">Speed \(Halo Audit\)</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-score">79<span class="c-of"> / 100</span></div>'
+        $this->assertMatchesRegularExpression('#<div class="c-name">Speed</div><div style="font-size:3pt;line-height:1">&nbsp;</div><div class="c-counts">.*?</div></td><td class="ca-score"><div class="c-score">79<span class="c-of"> / 100</span></div>'
             . '.*?<td class="ca-bar" colspan="2"><div class="c-bar">.*?</div></td></tr>.*?<td class="ca-vs" colspan="2"><div class="c-vs">Competitor 0 / 100&nbsp;#s', $html);
         $this->assertStringContainsString('<td class="halo halo-score">79 / 100</td><td class="halo halo-score">0 / 100</td>', $html);
         $this->assertStringNotContainsString('had not finished', $html);
@@ -356,12 +356,13 @@ class Halo_Competitor_Speed_Test extends WP_UnitTestCase
         $this->assertStringContainsString(Analyzer::SPEED_PENDING, $html);
     }
 
-    public function test_the_pdf_route_still_needs_the_unlock_and_names_the_file_halo_audit_pdf(): void
+    public function test_the_pdf_route_still_needs_the_unlock_and_names_the_file_after_both_pages(): void
     {
         $id = $this->compare();
         $this->assertSame(403, $this->call('GET', '/report/' . $id . '/pdf')->get_status());
         $source = (string) file_get_contents(dirname(__DIR__, 2) . '/includes/engine/Wp/RestController.php');
-        $this->assertStringContainsString("header('Content-Disposition: attachment; filename=\"' . Pdf::FILENAME . '\"');", $source);
-        $this->assertSame('halo-audit.pdf', Pdf::FILENAME);
+        $this->assertStringContainsString("header('Content-Disposition: attachment; filename=\"' . Pdf::filename(\$row['report']) . '\"');", $source);
+        $name = Pdf::filename(Plugin::store()->get($id)['report']);
+        $this->assertMatchesRegularExpression('/^halo-audit-[a-z0-9.-]+-vs-[a-z0-9.-]+-\d{4}-\d{2}-\d{2}\.pdf$/', $name);
     }
 }

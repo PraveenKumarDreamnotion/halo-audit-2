@@ -10,16 +10,30 @@
 final class Halo_Pdf_Rows
 {
     private const NAME = '<tr>(?:<td class="fcb-[a-z_]+" rowspan="\d"></td>)?<td class="check"><strong>(.*?)</strong>(?:<div class="metric">[^<]*</div>)?(?:<div class="why">.*?</div>)?</td>';
-    private const CELL = '<td class="res2?">(?:<div class="fc-lbl">[^<]*</div>)?(.*?)</td>';
+    /** A result cell: in a comparison card the label, then the result line in a block of its own (see Pdf::findingCard()). */
+    private const CELL = '<td class="res2?">(?:<div class="fc-lbl">[^<]*</div><div>(.*?)</div>|(.*?))</td>';
+
+    /**
+     * The HTML without the fallback-font wrapper Pdf puts around characters the brand fonts lack (status signs,
+     * non-Latin runs: <span class="fb">✓</span>) and without the line breaks in long addresses, so a row reads as its
+     * text. Both are tested in PdfTest.
+     */
+    public static function withoutFallback(string $html): string
+    {
+        // The line breaks Pdf puts into long addresses (see Pdf::text()) are left out too.
+        return str_replace('<br />', '', (string) preg_replace('#<span class="fb">(.*?)</span>#su', '$1', $html));
+    }
 
     /** @return array<string,array{0:string,1:string,2:string}> title => [your page cell, competitor cell, what to do] */
     public static function comparison(string $html): array
     {
+        $html = self::withoutFallback($html);
         preg_match_all('#' . self::NAME . self::CELL . self::CELL . '</tr>'
             . '(?:<tr><td class="fix" colspan="3"><strong class="fix-label">What to do on your page:</strong> (.*?)</td></tr>)?#s', $html, $m, PREG_SET_ORDER);
         $rows = [];
         foreach ($m as $row) {
-            $rows[$row[1]] = [$row[2], $row[3], $row[4] ?? ''];
+            // Each CELL has two alternative groups (labelled block, or plain): take whichever matched.
+            $rows[$row[1]] = [($row[2] ?? '') !== '' ? $row[2] : ($row[3] ?? ''), ($row[4] ?? '') !== '' ? $row[4] : ($row[5] ?? ''), $row[6] ?? ''];
         }
         return $rows;
     }
@@ -40,6 +54,7 @@ final class Halo_Pdf_Rows
     /** @return array<string,array{0:string,1:string,2:string}> title => [status label, evidence, what to do] */
     public static function single(string $html): array
     {
+        $html = self::withoutFallback($html);
         preg_match_all('#' . self::NAME . '<td class="res"><span class="chip chip-[a-z_]+">(.*?)</span>(?: <span class="evidence">(.*?)</span>)?</td></tr>'
             . '(?:<tr><td class="fix" colspan="2"><strong class="fix-label">What to do:</strong> (.*?)</td></tr>)?#s', $html, $m, PREG_SET_ORDER);
         $rows = [];

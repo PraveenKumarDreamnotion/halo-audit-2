@@ -176,7 +176,7 @@ class Halo_Compare_Test extends WP_UnitTestCase
         $data = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'mba'])->get_data();
         $this->assertArrayNotHasKey('competitor', $data);
         $this->assertSame(0, $this->pageFetches(self::THEIRS));
-        $this->assertSame(['url', 'keyword', 'is_education', 'speed_done', 'summary', 'labels', 'report_id', 'unlocked'], array_keys($data));
+        $this->assertSame(['url', 'keyword', 'is_education', 'speed_done', 'speed_failed', 'summary', 'labels', 'report_id', 'unlocked'], array_keys($data));
     }
 
     public function test_full_comparison_needs_the_unlock_and_then_holds_both_sets_of_findings(): void
@@ -398,12 +398,14 @@ class Halo_Compare_Test extends WP_UnitTestCase
         $report = Plugin::store()->get($id)['report'];
         $report['competitor']['url'] = 'https://rival.example.org/?q=<script>alert(1)</script>';
 
-        // Zero-width spaces are the PDF's line-break points in long addresses. Without them the address is
-        // still escaped, and nothing in it is markup.
-        $html = str_replace("\u{200B}", '', Pdf::html($report));
+        // Long addresses get line breaks where a line is full (Pdf::text()). Without them the address is still
+        // escaped, and nothing in it is markup.
+        $html = str_replace(["\u{200B}", '<br />'], '', Pdf::html($report));
         $this->assertStringContainsString('<td class="meta-label">Your page</td>', $html);
-        $this->assertStringContainsString('<td class="meta-label">Competitor page</td>', $html);
-        $this->assertStringContainsString('<h1>SEO comparison report</h1>', $html);
+        $this->assertStringContainsString('<td class="meta-label">Competitor</td>', $html);
+        // As in the reference: the title names the keyword, the eyebrow the report type.
+        $this->assertMatchesRegularExpression('#<h1>How your page compares for &ldquo;[^<]+&rdquo;</h1>#', $html);
+        $this->assertStringContainsString('SEO comparison report', $html);
         $this->assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html);
         $this->assertStringNotContainsString('<script>', $html);
         // One row per check that ran on either page, each page in its own column (see CompareFindingsSpeedTest).

@@ -4,6 +4,7 @@ namespace HaloAudit\Checks\OnPage;
 use HaloAudit\BaseCheck;
 use HaloAudit\Context;
 use HaloAudit\Result;
+use HaloAudit\Text;
 
 final class ImageAlt extends BaseCheck
 {
@@ -23,7 +24,7 @@ final class ImageAlt extends BaseCheck
             return Result::pass('No images on the page');
         }
         $with = count(array_filter($images, static fn(array $i): bool => $i['has_alt']));
-        $evidence = $with . ' of ' . $total . ' images have an alt attribute';
+        $evidence = Text::number($with) . ' of ' . Text::number($total) . ' images have an alt attribute';
         if ($with === $total) {
             return Result::pass($evidence);
         }

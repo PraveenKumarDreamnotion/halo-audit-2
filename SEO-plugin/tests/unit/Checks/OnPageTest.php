@@ -83,6 +83,27 @@ final class OnPageTest extends TestCase
         ];
     }
 
+    /** @dataProvider counts */
+    public function test_counts_in_evidence_have_a_thousands_separator(string $class, string $body, string $evidence): void
+    {
+        $result = (new $class())->run(Make::ctx(Make::page('', $body)));
+        $this->assertSame($evidence, $result->evidence);
+    }
+
+    public function counts(): array
+    {
+        $imgs = static fn(int $with, int $without): string => str_repeat('<img src="a" alt="x">', $with) . str_repeat('<img src="b">', $without);
+        $links = static fn(int $n): string => str_repeat('<a href="/a">a</a>', $n);
+        return [
+            'words 999' => [OnPage\WordCount::class, Make::words(999), '999 words'],
+            'words 1000' => [OnPage\WordCount::class, Make::words(1000), '1,000 words'],
+            'words 2702' => [OnPage\WordCount::class, Make::words(2702), '2,702 words'],
+            'images 1200' => [OnPage\ImageAlt::class, $imgs(1199, 1), '1,199 of 1,200 images have an alt attribute'],
+            'links 1500' => [OnPage\InternalLinks::class, $links(1500), '1,500 internal links'],
+            'links 1' => [OnPage\InternalLinks::class, $links(1), '1 internal link'],
+        ];
+    }
+
     public function test_noindex_in_response_header_fails(): void
     {
         $site = Make::site();

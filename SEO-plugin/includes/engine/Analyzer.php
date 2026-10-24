@@ -9,6 +9,8 @@ final class Analyzer
     public const SPEED_PENDING = 'The speed test had not finished yet';
     /** Evidence of a speed check on a site with no PageSpeed key: Google was never asked. */
     public const SPEED_OFF = 'Speed is not tested on this site';
+    /** Evidence of a speed check whose PageSpeed test ran and gave no usable result (see Checks\Speed). */
+    public const SPEED_NO_RESULT = 'Google PageSpeed did not return a result';
 
     private Fetcher $fetcher;
     private CertProbe $cert;
@@ -101,6 +103,25 @@ final class Analyzer
         $report['speed_done'] = true;
         $report['summary'] = Scorer::score($report['checks']);
         return $report;
+    }
+
+    /**
+     * Whether a page's speed test ran and failed: the step is closed, yet no speed check has a reading and each says
+     * Google gave no result. Read from the stored rows, so it also holds for reports saved before this existed.
+     * A site without a PageSpeed key (SPEED_OFF) or a test still running is not a failure.
+     */
+    public static function speedFailed(array $report): bool
+    {
+        if (empty($report['speed_done'])) {
+            return false;
+        }
+        $rows = array_filter((array) ($report['checks'] ?? []), static fn($row): bool => is_array($row) && ($row['group'] ?? '') === 'speed');
+        foreach ($rows as $row) {
+            if (($row['status'] ?? '') !== Result::NOT_MEASURED || ($row['evidence'] ?? '') !== self::SPEED_NO_RESULT) {
+                return false;
+            }
+        }
+        return $rows !== [];
     }
 
     /** Closes the speed step without a test (no PageSpeed key): Not measured, and the evidence says why. */

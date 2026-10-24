@@ -53,6 +53,28 @@ final class AnalyzerTest extends TestCase
         $this->assertNull($report['summary']['groups']['speed']['score']);
     }
 
+    /** Failed = the test ran and gave nothing. Pending, no key, a partial or a real result are not failures. */
+    public function test_speed_failed_is_read_from_the_stored_rows(): void
+    {
+        $this->servePage();
+        $report = $this->analyzer->analyze('example.com/courses/mba/', 'MBA')['report'];
+        $this->assertFalse(Analyzer::speedFailed($report), 'Still running.');
+        $failed = Analyzer::applySpeed($report, null);
+        $this->assertTrue(Analyzer::speedFailed($failed));
+        $this->assertTrue(ReportView::free($failed)['speed_failed']);
+        foreach ($failed['checks'] as $row) {
+            if ($row['group'] === 'speed') {
+                $this->assertSame([\HaloAudit\Result::NOT_MEASURED, Analyzer::SPEED_NO_RESULT], [$row['status'], $row['evidence']], 'The checks write the evidence speedFailed() reads.');
+            }
+        }
+        $this->assertNull($failed['summary']['groups']['speed']['score'], 'No result is never a score of 0.');
+        $this->assertSame([0, 0, 0, 3], [$failed['summary']['groups']['speed']['pass'], $failed['summary']['groups']['speed']['warn'], $failed['summary']['groups']['speed']['fail'], $failed['summary']['groups']['speed']['not_measured']]);
+        $this->assertFalse(Analyzer::speedFailed(Analyzer::skipSpeed($report)), 'No key is not a failure.');
+        $this->assertFalse(Analyzer::speedFailed(Analyzer::applySpeed($report, ['score' => 80, 'lcp_ms' => 2000.0, 'cls' => 0.01])));
+        $this->assertFalse(ReportView::free(Analyzer::applySpeed($report, ['score' => 80, 'lcp_ms' => 2000.0, 'cls' => 0.01]))['speed_failed']);
+        $this->assertFalse(Analyzer::speedFailed(['speed_done' => true, 'checks' => []]), 'A report with no speed rows.');
+    }
+
     public function test_side_file_failures_are_not_measured_not_failed(): void
     {
         $this->servePage(); // robots, sitemap, llms all have no route: transport error

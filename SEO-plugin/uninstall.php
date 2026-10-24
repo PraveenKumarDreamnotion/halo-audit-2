@@ -36,5 +36,5 @@ foreach ([
 
 wp_clear_scheduled_hook('halo_audit_purge');
 wp_unschedule_hook('halo_audit_brevo_sync');
-$wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'halo\_audit\_brevo\_s\_%' OR option_name LIKE 'halo\_audit\_brevo\_l\_%'");
+$wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'halo\_audit\_brevo\_s\_%' OR option_name LIKE 'halo\_audit\_brevo\_l\_%' OR option_name LIKE 'halo\_audit\_speed\_lock\_%'");
 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_halo\_rl\_%' OR option_name LIKE '\_transient\_timeout\_halo\_rl\_%'");

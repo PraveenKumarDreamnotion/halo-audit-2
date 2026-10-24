@@ -127,6 +127,8 @@ final class TechnicalTest extends TestCase
         $this->assertSame('warn', $this->status(Technical\JsRendering::class, [], Make::words(199)));
         $this->assertSame('warn', $this->status(Technical\JsRendering::class, [], Make::words(50)));
         $this->assertSame('fail', $this->status(Technical\JsRendering::class, [], '<div id="root"></div>'));
+        $result = (new Technical\JsRendering())->run(Make::ctx(Make::page('', Make::words(2488))));
+        $this->assertSame('2,488 words in the first HTML response', $result->evidence);
     }
 
     public function test_every_check_has_copy(): void
