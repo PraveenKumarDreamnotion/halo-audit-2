@@ -11,6 +11,7 @@ final class ReportView
             'keyword' => $report['keyword'],
             'is_education' => (bool) $report['is_education'],
             'speed_done' => (bool) $report['speed_done'],
+            'speed_failed' => Analyzer::speedFailed($report),
             'summary' => $report['summary'],
             'labels' => Scorer::LABELS,
         ];
@@ -20,6 +21,7 @@ final class ReportView
                 'url' => $c['url'],
                 'is_education' => (bool) $c['is_education'],
                 'speed_done' => (bool) $c['speed_done'],
+                'speed_failed' => Analyzer::speedFailed($c),
                 'summary' => $c['summary'],
             ];
         }

@@ -3,7 +3,7 @@ Contributors: thrivemattic
 Tags: seo, audit, ai, performance
 Requires at least: 6.2
 Tested up to: 7.1
-Stable tag: 2.0.1
+Stable tag: 2.0.2
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -75,6 +75,7 @@ If a code cannot be sent, the visitor sees "We could not send the code" and the 
 * `title=""` leaves the heading out. Use this when the page already has a heading for the tool.
 * `heading_level="3"` sets the heading level, 2 to 5. The default is 2.
 * `align="wide"` or `align="full"` adds the standard WordPress alignment class, so a block theme gives the tool its wide or full width.
+* `cta_url="https://example.com/contact/"` adds a closing block under the full findings, with a button to that address. `cta_title`, `cta_text` and `cta_button` set its heading, text and button label (the label defaults to "Talk to us"). Only a full http or https address is accepted (not a relative path such as `/contact/`). Without `cta_url` there is no block.
 
 * `comparison="true"` turns on the competitor comparison: the form asks for your page, a competitor page and one keyword. Both pages are audited by the same checks and the report shows the two scores, each area side by side, and how the competitor page did on every finding. `competitor="false"` keeps the comparison off; `competitor="true"` on its own does nothing.
 
@@ -109,7 +110,9 @@ The colours suit a light background. To change them, set the `--halo-*` variable
 
 `.halo-audit { --halo-accent: #1a56db; --halo-radius: 4px; }`
 
-Variables: `--halo-ink`, `--halo-muted`, `--halo-line`, `--halo-soft`, `--halo-field`, `--halo-surface`, `--halo-pad`, `--halo-radius`, `--halo-accent`, `--halo-accent-ink`, `--halo-pass`, `--halo-warn`, `--halo-fail`.
+Variables: `--halo-ink`, `--halo-muted`, `--halo-line`, `--halo-soft`, `--halo-field`, `--halo-surface`, `--halo-pad`, `--halo-radius`, `--halo-accent`, `--halo-accent-ink`, `--halo-button`, `--halo-button-hover`, `--halo-display`, `--halo-body`, `--halo-pass`, `--halo-warn`, `--halo-fail`.
+
+`--halo-accent` colours the bars, rules and focus rings. The filled buttons use `--halo-button` and `--halo-button-hover` (a darker olive by default, so their white `--halo-accent-ink` text keeps a 4.5:1 contrast); set those too when you change the accent. `--halo-display` (scores and headings) defaults to Oswald and `--halo-body` (small labels) to Lato, both loaded from the plugin's own `assets/fonts/`; the rest of the text uses the theme's font.
 
 A theme can follow the tool's state. The root element carries `data-state` (`idle`, `invalid`, `loading`, `error`, `preview`, `gate`, `code`, `unlocked`), and a `halo-audit:state` event bubbles from it on each change.
 
@@ -128,11 +131,18 @@ Deactivating keeps all data. Deleting the plugin from the Plugins screen removes
 
 == PDF fonts and languages ==
 
-The PDF is set in DejaVu Sans (Bitstream Vera licence with DejaVu changes in the public domain). Text in Devanagari (Hindi, Marathi, Nepali, Sanskrit), such as a Hindi keyword or address, is set in FreeSans from GNU FreeFont, version 0412.2268, copyright 2002-2012 GNU FreeFont contributors, under the GNU General Public License version 3 or later with the FreeFont font exception: a PDF that embeds the font is not itself covered by the GPL (full terms: `licenses/FreeFont-GPL-3.0-with-font-exception.txt`). Both fonts come with mPDF in `vendor/mpdf/mpdf/ttfonts/`; the ZIP keeps only these files (FreeSans adds about 1.5 MB uncompressed). Nothing is downloaded when a PDF is made.
+The PDF text is set in Lato and its headings and score numbers in Oswald, both from the plugin's own `assets/fonts/` under the SIL Open Font License 1.1 (`assets/fonts/OFL-Lato.txt`, `assets/fonts/OFL-Oswald.txt`). The same files give the on-page results their Oswald and Lato. Lato and Oswald cover Western European text; any character they do not have (the status signs, Cyrillic, Greek, Vietnamese, Arabic and others) is set in DejaVu Sans Condensed, and the status signs in the chips are set in DejaVu. A copy of the plugin without `assets/fonts/` sets the whole PDF in DejaVu, as before.
+
+DejaVu Sans is under the Bitstream Vera licence with DejaVu changes in the public domain. Text in Devanagari (Hindi, Marathi, Nepali, Sanskrit), such as a Hindi keyword or address, is set in FreeSans from GNU FreeFont, version 0412.2268, copyright 2002-2012 GNU FreeFont contributors, under the GNU General Public License version 3 or later with the FreeFont font exception: a PDF that embeds the font is not itself covered by the GPL (full terms: `licenses/FreeFont-GPL-3.0-with-font-exception.txt`). Both fonts come with mPDF in `vendor/mpdf/mpdf/ttfonts/`; the ZIP keeps only these files (FreeSans adds about 1.5 MB uncompressed). Nothing is downloaded when a PDF is made.
+
+The PDF downloads as `halo-audit-<site>-<YYYY-MM-DD>.pdf`, or `halo-audit-<site>-vs-<competitor site>-<YYYY-MM-DD>.pdf` for a comparison. The site is the audited host without `www.`, in plain ASCII; the date is the report date (UTC). When no safe name can be made, the file is `halo-audit.pdf`.
 
 Hindi in a bold heading or check name is set in regular weight: mPDF 8.3 misplaces the anusvara in FreeSans Bold. Hindi copied or searched in the PDF comes out in display order (a vowel sign before its letter), a known mPDF limit for shaped scripts; it reads correctly on the page. Other scripts with no bundled font (Chinese, Japanese, Korean, Tamil, Telugu, Bengali, Gujarati and others) print as empty boxes.
 
 == Upgrade Notice ==
+
+= 2.0.2 =
+The PDF has a new look (Lato and Oswald, a charcoal cover) and downloads with the site and date in its name. Every PDF carries the Thrivemattic logo, author, footer credit and the closing call to action ("Book a Discovery Call", https://thrivemattic.com/contact/); the `halo_audit_pdf_brand` filter can change or switch them off. The competitor comparison is back (`comparison="true"`). Clear your optimisation plugin's minified CSS and JavaScript after updating.
 
 = 2.0.1 =
 Scoring changes (pages that are not a 2xx web page get no score; refused or failing side files show "Not measured"). Needs the PHP cURL extension. Security fixes for the address check and the email code.
@@ -146,7 +156,10 @@ Needs PHP 8.0 and WordPress 6.2. The OpenAI and NLP add-ons are no longer used: 
 * Filter `halo_audit_speed_enabled`: return true or false to force the speed test on or off.
 * Filter `halo_audit_curl_usable`: whether page fetches may run (default: the cURL transport with SSL is usable). Returning false stops every audit; it exists for tests.
 * Filter `halo_audit_user_agent`: the user agent used to read pages. The default names this site.
-* Filter `halo_audit_pdf_footer`: the credit line in the footer of every PDF page, beside the page number. The default names this site: "Report generated by <Site Title> with Halo Audit." (the site's host name when it has no title; no address, so a staging site does not print its internal URL). Arguments: the default text and the report. Return your own text, or an empty string to leave it out.
+* Filter `halo_audit_pdf_footer`: the credit line in the footer of every PDF page, beside the page number. The default is "Report generated by thrivemattic.com with Halo Audit" on every site (no address of the site itself, so a staging site does not print its internal URL). Arguments: the default text and the report. Return your own text, or an empty string to leave it out.
+* Filter `halo_audit_pdf_brand`: the branding of the PDFs. The default (`Pdf::DEFAULT_BRAND`) is Thrivemattic's: the bundled logo, the author "Thrivemattic" and the approved closing call to action with a "Book a Discovery Call" button to https://thrivemattic.com/contact/. Return `false` for a neutral PDF (the "HALO AUDIT" text mark, no logo, no call to action, no author), or your own array: `['logo' => true]` to show the plugin's bundled logo on the cover and in the running header, `'cta' => ['eyebrow' => …, 'title' => …, 'text' => …, 'button' => …, 'url' => 'https://…']` to end the PDF with a call to action, and `'author' => …` for the PDF's author field. Only these values are read: the logo is always one of the plugin's own files (a path, URL or image from the filter is ignored), texts are plain and shortened, and the address must be a full http or https URL or the button has no link. Arguments: the default brand array and the report.
+* PDF metadata: the title is "Halo Audit: SEO audit report" or "Halo Audit: SEO comparison report"; the author is "Thrivemattic" unless `halo_audit_pdf_brand` changes it (empty when the filter returns `false`).
+* Speed retry: when a page's PageSpeed test ran and gave no result, the results show "Try the speed test again". It posts to `halo-audit/v1/speed` with `report_id`, `side` (`mine` or `competitor`) and `retry: true`, under the same nonce and rate limit (20 speed tests an hour per IP). Only that page is measured again, only when its stored result is "no result" and a PageSpeed key is set; otherwise the stored result is returned. One test per page runs at a time: a second call while one runs gets 409.
 * Filter `halo_audit_send_code`: return true or false to send the code yourself. Arguments: null, the address, the code.
 * Filter `halo_audit_scan_client`: return a `HaloAudit\ScanClient` to enable the live AI visibility scan.
 * Tests: `composer test` (unit). Integration tests need Docker: `npx wp-env start`, then

@@ -30,6 +30,29 @@ class Halo_Shortcode_Test extends WP_UnitTestCase
         $this->assertStringContainsString('class="halo-audit__results" hidden', $html);
     }
 
+    /** cta_url (http or https only) turns on the closing block; its texts are escaped attribute values. */
+    public function test_cta_attributes_need_a_web_address_and_are_escaped(): void
+    {
+        $html = do_shortcode('[seo_analyzer cta_url="https://example.com/contact/" cta_title="Fix it &quot;now&quot;" cta_text="One <b>page</b>" cta_button="Book"]');
+        $this->assertStringContainsString('data-cta-url="https://example.com/contact/"', $html);
+        $this->assertMatchesRegularExpression('/data-cta-title="Fix it (&quot;|&#039;|&#34;)now(&quot;|&#039;|&#34;)"/', $html);
+        $this->assertStringContainsString('data-cta-text="One &lt;b&gt;page&lt;/b&gt;"', $html);
+        $this->assertStringContainsString('data-cta-button="Book"', $html);
+        $this->assertStringNotContainsString('<b>page</b>', $html);
+
+        // No block without a web address: other schemes, relative and empty addresses give no attribute at all.
+        foreach (['javascript:alert(1)', 'data:text/html,x', 'ftp://example.com/', '/contact/', ''] as $url) {
+            $out = do_shortcode('[seo_analyzer cta_url="' . $url . '" cta_title="T" cta_text="X" cta_button="B"]');
+            $this->assertStringNotContainsString('data-cta-', $out, $url);
+        }
+        $this->assertStringNotContainsString('data-cta-', do_shortcode('[seo_analyzer cta_title="Only a title"]'));
+
+        // Optional texts left out are not printed; each widget carries only its own block.
+        $two = do_shortcode('[seo_analyzer cta_url="https://example.com/a/"]') . do_shortcode('[seo_analyzer]');
+        $this->assertSame(1, substr_count($two, 'data-cta-url='));
+        $this->assertStringNotContainsString('data-cta-title', $two);
+    }
+
     public function test_empty_title_renders_no_heading_and_keeps_an_accessible_name(): void
     {
         $html = do_shortcode('[seo_analyzer title=""]');

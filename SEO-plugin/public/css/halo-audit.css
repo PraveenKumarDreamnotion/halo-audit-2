@@ -4,6 +4,18 @@
  * (container queries), not from the width of the window. One column is the default.
  * A site can restyle it by setting the --halo-* variables on .halo-audit.
  */
+
+/*
+ * Oswald (scores, headings) and Lato (small labels), from the plugin's own assets/fonts (the files the PDF
+ * uses, SIL OFL). Own family names, so a theme's own "Oswald" or "Lato" is never changed. A face is only
+ * downloaded when the widget uses it.
+ */
+@font-face { font-family: "Halo Oswald"; src: url("../../assets/fonts/Oswald-Medium.ttf") format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: "Halo Oswald"; src: url("../../assets/fonts/Oswald-SemiBold.ttf") format("truetype"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Halo Oswald"; src: url("../../assets/fonts/Oswald-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Halo Lato"; src: url("../../assets/fonts/Lato-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Halo Lato"; src: url("../../assets/fonts/Lato-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+
 .halo-audit {
   --halo-ink: #1c2529;
   --halo-text: #333333;
@@ -17,10 +29,12 @@
   --halo-radius: 8px;
   --halo-radius-lg: 12px;
   --halo-accent: #808000;
-  --halo-accent-hover: #6d6d00;
+  /* Filled buttons: a darker olive, so their white text passes WCAG AA (5.47:1; #808000 gives 4.20:1). */
+  --halo-button: #6d6d00;
+  --halo-button-hover: #5c5c00;
   --halo-accent-ink: #ffffff;
-  --halo-display: "Oswald", "Arial Narrow", sans-serif;
-  --halo-body: "Lato", system-ui, sans-serif;
+  --halo-display: "Halo Oswald", "Oswald", "Arial Narrow", sans-serif;
+  --halo-body: "Halo Lato", "Lato", system-ui, sans-serif;
   /* Status colours: dark text on a light tint, readable (WCAG AA) and the same as the PDF. */
   --halo-pass: #4f5200;
   --halo-pass-bg: #ecedd9;
@@ -69,10 +83,10 @@
 .halo-audit .halo-audit__button {
   display: inline-block; width: auto; min-height: 46px; margin: 0; padding: 11px 22px;
   font: inherit; font-size: 1rem; font-weight: 700; line-height: 1.3; letter-spacing: normal; text-transform: none; text-decoration: none; white-space: nowrap;
-  color: var(--halo-accent-ink); background: var(--halo-accent); border: 2px solid var(--halo-accent); border-radius: var(--halo-radius);
+  color: var(--halo-accent-ink); background: var(--halo-button); border: 2px solid var(--halo-button); border-radius: var(--halo-radius);
   box-shadow: none; cursor: pointer; -webkit-appearance: none; appearance: none;
 }
-.halo-audit .halo-audit__button:hover { background: var(--halo-accent-hover); border-color: var(--halo-accent-hover); color: var(--halo-accent-ink); text-decoration: none; }
+.halo-audit .halo-audit__button:hover { background: var(--halo-button-hover); border-color: var(--halo-button-hover); color: var(--halo-accent-ink); text-decoration: none; }
 .halo-audit .halo-audit__button[disabled] { opacity: 0.6; cursor: wait; }
 .halo-audit .halo-audit__button--ghost { background: transparent; color: var(--halo-ink); border-color: var(--halo-ink); }
 .halo-audit .halo-audit__button--ghost:hover { background: var(--halo-ink); border-color: var(--halo-ink); color: #ffffff; }
@@ -101,6 +115,9 @@
 .halo-audit .halo-audit__bar { display: block; height: 5px; margin: 2px 0; background: var(--halo-track); border-radius: 999px; overflow: hidden; }
 .halo-audit .halo-audit__bar-fill { display: block; height: 100%; background: var(--halo-accent); border-radius: 999px; }
 .halo-audit .halo-audit__group-counts { font-size: 0.84rem; color: var(--halo-muted); }
+/* "Try the speed test again": smaller than the main buttons, and it wraps inside a narrow area card. */
+.halo-audit .halo-audit__retry { align-self: flex-start; min-height: 40px; margin-top: 4px; padding: 7px 14px; font-size: 0.875rem; white-space: normal; text-align: left; }
+.halo-audit .halo-audit__speed-failed .halo-audit__retry { margin: 6px 0 0; }
 
 .halo-audit .halo-audit__actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 20px; }
 
@@ -157,10 +174,14 @@
 .halo-audit .halo-audit__check-title { display: block; font-weight: 700; color: var(--halo-ink); }
 .halo-audit .halo-audit__check-body p { margin: 4px 0 0; padding: 0; }
 .halo-audit .halo-audit__evidence { color: var(--halo-text); overflow-wrap: anywhere; word-break: break-word; }
-.halo-audit .halo-audit__check-body .halo-audit__fix {
-  margin-top: 10px; padding: 10px 14px; font-weight: 400; color: var(--halo-text);
+/* "What to do": one style for the single-page findings and your page's side of a comparison. */
+.halo-audit .halo-audit__check-body .halo-audit__fix,
+.halo-audit .halo-audit__result .halo-audit__fix {
+  margin-top: 10px; padding: 10px 14px; font-weight: 400; color: var(--halo-text); overflow-wrap: anywhere;
   background: var(--halo-soft); border-left: 3px solid var(--halo-accent); border-radius: 0 var(--halo-radius) var(--halo-radius) 0;
 }
+/* A comparison result card is already cream (--halo-soft), so the row is white there to stay visible. */
+.halo-audit .halo-audit__result .halo-audit__fix { background: #ffffff; }
 .halo-audit .halo-audit__fix strong { color: var(--halo-ink); }
 .halo-audit .halo-audit__why { font-size: 0.875rem; color: var(--halo-muted); }
 .halo-audit .halo-audit__check-body .halo-audit__why { margin-top: 8px; }
@@ -189,6 +210,17 @@
 .halo-audit .halo-audit__cta { margin: 28px 0 0; padding: 28px; border-radius: var(--halo-radius-lg); background: var(--halo-ink); color: rgba(255, 255, 255, 0.72); }
 .halo-audit .halo-audit__cta-title { margin: 0 0 8px; font-family: var(--halo-display); font-weight: 500; font-size: 1.6rem; line-height: 1.2; color: #ffffff; }
 .halo-audit .halo-audit__cta-text { margin: 0 0 18px; max-width: 680px; }
+/*
+ * The block is dark, so its text and its link button must keep their colours even where a theme colours every
+ * paragraph and link with !important (seen on a live theme: white-on-charcoal text became #333, 1.23:1, and the
+ * button label became olive on olive, 1.30:1). Scoped to the block; nothing else here uses !important.
+ */
+.halo-audit .halo-audit__cta .halo-audit__cta-title { color: #ffffff !important; }
+.halo-audit .halo-audit__cta .halo-audit__cta-text { color: rgba(255, 255, 255, 0.72) !important; }
+/* The class is repeated on purpose: a theme rule such as ".x .y a:not(.a):not(.b) { color: … !important }" has the
+   same weight as one repetition fewer and, loaded later, would win the tie. */
+.halo-audit .halo-audit__cta a.halo-audit__button.halo-audit__button.halo-audit__button,
+.halo-audit .halo-audit__cta a.halo-audit__button.halo-audit__button.halo-audit__button:hover { color: var(--halo-accent-ink) !important; }
 
 /* Comparison findings: each check shows your page and the competitor page side by side */
 .halo-audit .halo-audit__findings.halo-audit__findings--compare { column-count: auto; }

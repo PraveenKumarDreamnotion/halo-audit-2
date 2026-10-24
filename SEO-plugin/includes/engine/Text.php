@@ -13,6 +13,12 @@ final class Text
         return mb_stripos($haystack, $needle) !== false;
     }
 
+    /** A count as evidence text shows it: "2,702", with a comma for thousands. */
+    public static function number(int $n): string
+    {
+        return number_format($n);
+    }
+
     public static function words(string $text): int
     {
         return (int) preg_match_all('/[\p{L}\p{N}][\p{L}\p{M}\p{N}\'’-]*/u', $text);

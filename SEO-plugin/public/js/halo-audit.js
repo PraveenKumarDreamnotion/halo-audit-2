@@ -10,6 +10,8 @@
   var TOP_FIXES = 5;
   var DONE = 'Audit complete.';
   var SPEED_PENDING = 'Page read. The speed test is still running. It takes up to 90 seconds.';
+  var SPEED_FAILED = 'Page audit complete. The speed test did not return a result, so Speed is not measured.';
+  var RETRY = 'Try the speed test again';
 
   function route(path) {
     var parts = path.split('?');
@@ -185,24 +187,78 @@
         if (fresh && fresh.speed_done && !side(name).speed_done) {
           side(name).summary = fresh.summary;
           side(name).speed_done = true;
+          side(name).speed_failed = !!fresh.speed_failed;
         }
       }).catch(function () {
         if (self.data !== data) { return; }
-        side(name).speed_done = true; // No result for this page: its Speed shows "Not measured".
+        // No answer for this page (a timeout, an error): Speed is not measured and the page offers a retry. The
+        // server may still save a result; a retry then answers with it instead of testing again.
+        side(name).speed_done = true;
+        side(name).speed_failed = true;
       }).then(function () {
         if (self.data !== data) { return; }
         self.renderSummary();
-        // The findings' area lines also said "Testing speed...".
+        // The findings' area lines also said "Testing…".
         if (data.checks) { self.renderFindings(); }
       });
     }
     return step('mine').then(function () {
       return data.competitor ? step('competitor') : null;
+    }).then(function () { self.speedFinished(data); });
+  };
+
+  /* After a speed run or retry: the status line says honestly how it ended, and a full report is refreshed. */
+  Widget.prototype.speedFinished = function (data) {
+    if (this.data !== data) { return; }
+    var failed = data.speed_failed || (data.competitor && data.competitor.speed_failed);
+    if (this.status.textContent === SPEED_PENDING || this.status.textContent === DONE || this.status.textContent === SPEED_FAILED) {
+      this.say(failed ? SPEED_FAILED : DONE);
+    }
+    if (data.checks || data.unlocked) { this.loadFull(); }
+  };
+
+  /*
+   * "Try the speed test again" for one page whose test gave no result. It asks the server to test that page once
+   * more (retry: true) and nothing else: the page audit is not run again. While it runs the button is gone and
+   * Speed says "Testing…", so it cannot be started twice; the server also refuses a second test for the page.
+   */
+  Widget.prototype.retrySpeed = function (name) {
+    var self = this;
+    var data = this.data;
+    // Looked up each time: a full report loaded meanwhile replaces the competitor's object.
+    function side() { return name === 'competitor' ? data.competitor : data; }
+    if (!side() || side().retrying || !side().speed_failed) { return; }
+    side().retrying = true;
+    this.say('Testing the speed again. It takes up to 90 seconds.');
+    this.renderSummary();
+    this.speedRun = api('POST', 'speed', { report_id: data.report_id, side: name, retry: true }).then(function (speed) {
+      if (self.data !== data) { return; }
+      var fresh = name === 'competitor' ? speed.competitor : speed;
+      if (fresh && fresh.speed_done) {
+        side().summary = fresh.summary;
+        side().speed_failed = !!fresh.speed_failed;
+      }
+      var failed = data.speed_failed || (data.competitor && data.competitor.speed_failed);
+      self.say(failed ? SPEED_FAILED : DONE);
+    }).catch(function (error) {
+      if (self.data !== data) { return; }
+      self.say(error.status === 409 ? error.message : 'The speed test did not return a result. ' + error.message, true);
     }).then(function () {
       if (self.data !== data) { return; }
-      if (self.status.textContent === SPEED_PENDING) { self.say(DONE); }
+      side().retrying = false;
+      self.renderSummary();
       if (data.checks || data.unlocked) { self.loadFull(); }
     });
+    return this.speedRun;
+  };
+
+  /* A button that retries the speed test of one page ('mine' or 'competitor'). */
+  Widget.prototype.retryButton = function (name, label) {
+    var self = this;
+    var button = el('button', 'halo-audit__button halo-audit__button--ghost halo-audit__retry', label || RETRY);
+    button.type = 'button';
+    button.addEventListener('click', function () { self.retrySpeed(name); });
+    return button;
   };
 
   Widget.prototype.render = function () {
@@ -239,6 +295,7 @@
     this.summaryBox.appendChild(score);
 
     // role="list" on plain elements: a theme's bullet and indent rules for <ul> cannot reach it.
+    var self = this;
     var list = el('div', 'halo-audit__groups');
     list.setAttribute('role', 'list');
     Object.keys(summary.groups).forEach(function (key) {
@@ -246,10 +303,14 @@
       var item = el('div', 'halo-audit__group');
       item.setAttribute('role', 'listitem');
       item.appendChild(el('span', 'halo-audit__group-name', groupName(data, key)));
-      var pending = key === 'speed' && !data.speed_done;
+      var pending = key === 'speed' && (!data.speed_done || !!data.retrying);
+      var failed = key === 'speed' && !pending && !!data.speed_failed;
       var value = el('span', 'halo-audit__group-score');
       if (pending) {
         value.textContent = 'Testing\u2026';
+        value.classList.add('halo-audit__group-score--muted');
+      } else if (failed) {
+        value.textContent = 'No result';
         value.classList.add('halo-audit__group-score--muted');
       } else if (group.score === null) {
         value.textContent = 'Not measured';
@@ -259,8 +320,10 @@
         value.appendChild(el('small', null, '/ 100'));
       }
       item.appendChild(value);
-      if (!pending && group.score !== null) { item.appendChild(bar(group.score)); }
-      item.appendChild(el('span', 'halo-audit__group-counts', pending ? 'Takes up to 90 seconds.' : counts(group)));
+      if (!pending && !failed && group.score !== null) { item.appendChild(bar(group.score)); }
+      item.appendChild(el('span', 'halo-audit__group-counts',
+        pending ? 'Takes up to 90 seconds.' : (failed ? 'The speed test did not return a result.' : counts(group))));
+      if (failed) { item.appendChild(self.retryButton('mine')); }
       list.appendChild(item);
     });
     this.summaryBox.appendChild(list);
@@ -276,11 +339,15 @@
     return key === 'speed' ? name + ' (mobile)' : name;
   }
 
-  /* "5 to fix \u00b7 1 to improve \u00b7 6 pass", leaving out the counts that are zero. */
+  /*
+   * "5 to fix \u00b7 1 to improve \u00b7 6 pass", always in that order, leaving out the counts that are zero.
+   * "Every check passed" when every check in the area passed; "No result" when nothing was measured.
+   */
   function counts(group) {
     var parts = [];
     if (group.fail) { parts.push(group.fail + ' to fix'); }
     if (group.warn) { parts.push(group.warn + ' to improve'); }
+    if (group.pass && !parts.length && !group.not_measured) { return 'Every check passed'; }
     if (group.pass) { parts.push(group.pass + ' pass'); }
     return parts.length ? parts.join(' \u00b7 ') : 'No result';
   }
@@ -299,8 +366,10 @@
     return sides.some(function (s) { return s && s.speed_done && s.summary.groups.speed && s.summary.groups.speed.score !== null; });
   }
 
-  function groupScore(group, speedDone, key) {
-    if (key === 'speed' && !speedDone) { return 'Testing speed...'; }
+  /* An area's score as text. side is the page's data: its speed state decides what Speed says. */
+  function groupScore(group, side, key) {
+    if (key === 'speed' && (!side.speed_done || side.retrying)) { return 'Testing\u2026'; }
+    if (key === 'speed' && side.speed_failed) { return 'No result'; }
     return !group || group.score === null ? 'Not measured' : group.score + ' / 100';
   }
 
@@ -310,6 +379,7 @@
     var them = data.competitor;
     var box = this.summaryBox;
 
+    if (data.keyword) { box.appendChild(el('p', 'halo-audit__url', 'Keyword “' + data.keyword + '”')); }
     var versus = el('div', 'halo-audit__versus');
     [['Your page', data, 'halo-audit__side--you'], ['Competitor page', them, 'halo-audit__side--them']].forEach(function (side) {
       var card = el('div', 'halo-audit__side ' + side[2]);
@@ -337,8 +407,8 @@
       var theirs = them.summary.groups[key];
       var row = el('tr');
       var name = el('th', null, groupName(data, key)); name.scope = 'row'; row.appendChild(name);
-      row.appendChild(el('td', null, groupScore(mine, data.speed_done, key)));
-      row.appendChild(el('td', null, groupScore(theirs, them.speed_done, key)));
+      row.appendChild(el('td', null, groupScore(mine, data, key)));
+      row.appendChild(el('td', null, groupScore(theirs, them, key)));
       var diff = '';
       var cls = 'halo-audit__diff';
       if (mine && theirs && mine.score !== null && theirs.score !== null) {
@@ -357,6 +427,15 @@
     var wrap = el('div', 'halo-audit__compare-wrap');
     wrap.appendChild(table);
     box.appendChild(wrap);
+
+    // A page whose speed test gave no result: say so and offer a retry for that page only.
+    var self = this;
+    [['mine', data, 'your page', 'Try again for your page'], ['competitor', them, 'the competitor page', 'Try again for the competitor page']].forEach(function (side) {
+      if (!side[1].speed_failed || side[1].retrying) { return; }
+      var note = el('p', 'halo-audit__note halo-audit__speed-failed', 'The speed test for ' + side[2] + ' did not return a result, so its Speed is not measured. ');
+      note.appendChild(self.retryButton(side[0], side[3]));
+      box.appendChild(note);
+    });
 
     var mineSpeed = data.summary.groups.speed;
     var theirSpeed = them.summary.groups.speed;
@@ -505,10 +584,17 @@
     data.checks = full.checks;
     data.pairs = full.pairs || null;
     data.summary = full.summary;
+    var mineFailed = !!data.speed_failed;
+    var theirsFailed = !!(data.competitor && data.competitor.speed_failed);
+    var theirsRetrying = !!(data.competitor && data.competitor.retrying);
     data.speed_done = mineDone || !!full.speed_done;
+    // A stored result wins over a failure seen in the browser (a call that timed out after the server saved it).
+    data.speed_failed = full.speed_done ? !!full.speed_failed : mineFailed;
     if (full.competitor) {
       data.competitor = full.competitor;
       data.competitor.speed_done = theirsDone || !!full.competitor.speed_done;
+      data.competitor.speed_failed = full.competitor.speed_done ? !!full.competitor.speed_failed : theirsFailed;
+      data.competitor.retrying = theirsRetrying;
     }
   };
 
@@ -536,41 +622,84 @@
     box.appendChild(el('span', 'halo-audit__result-page', label));
     box.appendChild(el('span', 'halo-audit__badge', side ? (STATUS[side.status] || side.status) : 'Not checked'));
     if (side && side.evidence) { box.appendChild(el('p', 'halo-audit__evidence', side.evidence)); }
-    if (withFix && side && side.message) { box.appendChild(el('p', 'halo-audit__fix', side.message)); }
+    // The fix belongs to your page only (the server sends no fix for the competitor's side).
+    if (withFix && side && side.message) { box.appendChild(fixRow(side.message)); }
     return box;
   }
 
+  /* The "What to do" row: the label, then the check's own advice text. One builder for both views. */
+  function fixRow(message) {
+    var fix = el('p', 'halo-audit__fix');
+    fix.appendChild(el('strong', null, 'What to do: '));
+    fix.appendChild(document.createTextNode(message));
+    return fix;
+  }
+
+  /* Passed checks folded under a native disclosure, with how many there are; nothing when there are none. */
+  function foldPassed(summaryText, items) {
+    if (!items.length) { return null; }
+    var fold = el('details', 'halo-audit__passed');
+    fold.appendChild(el('summary', null, summaryText));
+    items.forEach(function (item) { fold.appendChild(item); });
+    return fold;
+  }
+
+  /* One check of a comparison: its name, both pages' results side by side, and why it matters. */
+  function compareCheck(pair) {
+    var item = el('div', 'halo-audit__check halo-audit__check--compare');
+    item.setAttribute('data-check', pair.id);
+    item.appendChild(el('strong', 'halo-audit__check-title', pair.title));
+    var both = el('div', 'halo-audit__results-pair');
+    both.appendChild(result(pair.mine, 'you', 'Your page', true));
+    both.appendChild(result(pair.theirs, 'them', 'Competitor page', false));
+    item.appendChild(both);
+    if (pair.why) { item.appendChild(el('p', 'halo-audit__why', pair.why)); }
+    return item;
+  }
+
+  /*
+   * Comparison findings, laid out like the single-page view: "Fix these first" for your page, then each area with
+   * the checks that need a look first (by your page's status: Fix, Improve, not measured or not checked) and the
+   * checks that passed on both pages folded away. A check that passed on your page but not on the competitor's
+   * stays open: the difference is the point of a comparison.
+   */
   Widget.prototype.renderComparisonFindings = function () {
     var self = this;
     var data = this.data;
     var box = this.findings;
     var groups = {};
     var order = [];
-    data.pairs.forEach(function (pair) {
+    var theirs = {};
+    (data.pairs || []).forEach(function (pair) {
+      if (!pair || !pair.group) { return; }
       if (!groups[pair.group]) { groups[pair.group] = []; order.push(pair.group); }
       groups[pair.group].push(pair);
+      theirs[pair.id] = pair.theirs || null;
     });
+    this.renderTopFixes(theirs);
+    var bothPassed = function (pair) { return !!(pair.mine && pair.theirs && pair.mine.status === 'pass' && pair.theirs.status === 'pass'); };
+    var attention = function (pair) {
+      var rank = pair.mine ? ATTENTION[pair.mine.status] : undefined;
+      return rank === undefined ? 2 : rank;
+    };
     order.forEach(function (key) {
       var section = el('section', 'halo-audit__section');
       section.appendChild(self.heading(1, 'halo-audit__section-title', data.labels[key] || key));
       var mine = data.summary.groups[key];
-      var theirs = data.competitor.summary.groups[key];
-      if (mine || theirs) {
+      var theirScore = data.competitor.summary.groups[key];
+      if (mine || theirScore) {
         section.appendChild(el('p', 'halo-audit__section-scores',
-          'Your page: ' + groupScore(mine, data.speed_done, key) + ' \u00b7 Competitor page: ' + groupScore(theirs, data.competitor.speed_done, key)));
+          'Your page: ' + groupScore(mine, data, key) + ' \u00b7 Competitor page: ' + groupScore(theirScore, data.competitor, key)));
       }
       if (key === 'speed' && speedMeasured([data, data.competitor])) { section.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
-      groups[key].forEach(function (pair) {
-        var item = el('div', 'halo-audit__check halo-audit__check--compare');
-        item.setAttribute('data-check', pair.id);
-        item.appendChild(el('strong', 'halo-audit__check-title', pair.title));
-        var both = el('div', 'halo-audit__results-pair');
-        both.appendChild(result(pair.mine, 'you', 'Your page', true));
-        both.appendChild(result(pair.theirs, 'them', 'Competitor page', false));
-        item.appendChild(both);
-        item.appendChild(el('p', 'halo-audit__why', pair.why));
-        section.appendChild(item);
-      });
+      var pairs = groups[key];
+      pairs.filter(function (pair) { return !bothPassed(pair); })
+        .map(function (pair, i) { return { pair: pair, i: i }; })
+        .sort(function (a, b) { return (attention(a.pair) - attention(b.pair)) || (a.i - b.i); })
+        .forEach(function (item) { section.appendChild(compareCheck(item.pair)); });
+      var passed = pairs.filter(bothPassed);
+      var fold = foldPassed(passed.length + (passed.length === 1 ? ' check passed on both pages' : ' checks passed on both pages'), passed.map(compareCheck));
+      if (fold) { section.appendChild(fold); }
       box.appendChild(section);
     });
   };
@@ -593,7 +722,7 @@
         var section = el('section', 'halo-audit__section');
         var title = self.heading(1, 'halo-audit__section-title', groupName(data, key));
         var group = data.summary.groups[key];
-        var meta = (group ? groupScore(group, data.speed_done, key) : 'Not scored') + ' \u00b7 ' + groups[key].length + (groups[key].length === 1 ? ' check' : ' checks');
+        var meta = (group ? groupScore(group, data, key) : 'Not scored') + ' \u00b7 ' + groups[key].length + (groups[key].length === 1 ? ' check' : ' checks');
         title.appendChild(el('span', 'halo-audit__section-meta', meta));
         section.appendChild(title);
         if (key === 'speed' && speedMeasured([data])) { section.appendChild(el('p', 'halo-audit__note', SPEED_NOTE)); }
@@ -602,13 +731,10 @@
         });
         var passed = rows.filter(function (row) { return row.status === 'pass'; });
         rows.filter(function (row) { return row.status !== 'pass'; }).forEach(function (row) { section.appendChild(check(row, true)); });
-        if (passed.length) {
-          // The passed checks are folded away: the open list is what needs work.
-          var fold = el('details', 'halo-audit__passed');
-          fold.appendChild(el('summary', null, passed.length + (passed.length === 1 ? ' check passed' : ' checks passed')));
-          passed.forEach(function (row) { fold.appendChild(check(row, false)); });
-          section.appendChild(fold);
-        }
+        // The passed checks are folded away: the open list is what needs work.
+        var fold = foldPassed(passed.length + (passed.length === 1 ? ' check passed' : ' checks passed'),
+          passed.map(function (row) { return check(row, false); }));
+        if (fold) { section.appendChild(fold); }
         box.appendChild(section);
       });
     }
@@ -627,30 +753,43 @@
     var body = el('div', 'halo-audit__check-body');
     body.appendChild(el('strong', 'halo-audit__check-title', row.title));
     if (row.evidence) { body.appendChild(el('p', 'halo-audit__evidence', row.evidence)); }
-    if (detail && row.message) {
-      var fix = el('p', 'halo-audit__fix');
-      fix.appendChild(el('strong', null, 'What to do: '));
-      fix.appendChild(document.createTextNode(row.message));
-      body.appendChild(fix);
-    }
+    if (detail && row.message) { body.appendChild(fixRow(row.message)); }
     if (detail && row.why) { body.appendChild(el('p', 'halo-audit__why', row.why)); }
     item.appendChild(body);
     return item;
   }
 
   /*
-   * "Fix these first": the Fix results, then the Improve results, of the scored areas. Within each, the checks
-   * that weigh most come first: the check's severity times its area's share of the score.
+   * The fixes that matter most, in the PDF's order (Pdf::rankFixes): Fix before Improve, then the checks that count
+   * most in their area (severity), then the areas that count most in the overall score. A tie keeps the order of the
+   * report. A check listed twice is listed once.
    */
-  Widget.prototype.renderTopFixes = function () {
-    var data = this.data;
+  function rankFixes(checks) {
     var weight = { onpage: 30, technical: 20, ai: 30, speed: 20 };
-    var rows = data.checks.filter(function (row) {
-      return (row.status === 'fail' || row.status === 'warn') && weight[row.group] && row.message;
+    var seen = {};
+    return (Array.isArray(checks) ? checks : []).map(function (row, i) { return { row: row, i: i }; }).filter(function (item) {
+      var row = item.row;
+      if (!row || (row.status !== 'fail' && row.status !== 'warn')) { return false; }
+      if (row.id === undefined || row.id === null) { return true; }
+      if (seen[row.id]) { return false; }
+      seen[row.id] = true;
+      return true;
     }).sort(function (a, b) {
-      return (ATTENTION[a.status] - ATTENTION[b.status]) ||
-        ((b.severity || 1) * weight[b.group] - (a.severity || 1) * weight[a.group]);
-    }).slice(0, TOP_FIXES);
+      return (ATTENTION[a.row.status] - ATTENTION[b.row.status]) ||
+        ((b.row.severity || 0) - (a.row.severity || 0)) ||
+        ((weight[b.row.group] || 0) - (weight[a.row.group] || 0)) ||
+        (a.i - b.i);
+    }).slice(0, TOP_FIXES).map(function (item) { return item.row; });
+  }
+
+  /*
+   * "Fix these first". Always your page's checks (data.checks): in a comparison a check that fails only on the
+   * competitor page is not a fix for you. With theirs (check ID to the competitor's result, from the pairs), each
+   * item also says how the competitor page did on that check.
+   */
+  Widget.prototype.renderTopFixes = function (theirs) {
+    var data = this.data;
+    var rows = rankFixes(data.checks);
     if (!rows.length) { return; }
     var section = el('section', 'halo-audit__section halo-audit__top');
     section.appendChild(this.heading(1, 'halo-audit__section-title', 'Fix these first'));
@@ -659,7 +798,12 @@
       var item = el('li', 'halo-audit__check--' + row.status);
       var text = el('span', 'halo-audit__top-text');
       text.appendChild(el('strong', null, row.title));
-      text.appendChild(el('span', 'halo-audit__top-area', groupName(data, row.group)));
+      var area = groupName(data, row.group);
+      if (theirs) {
+        var other = theirs[row.id];
+        area += ' · Competitor: ' + (other ? (STATUS[other.status] || other.status) : 'Not checked');
+      }
+      text.appendChild(el('span', 'halo-audit__top-area', area));
       item.appendChild(text);
       item.appendChild(el('span', 'halo-audit__badge', STATUS[row.status]));
       list.appendChild(item);
@@ -688,26 +832,38 @@
     if (button.disabled) { return; }
     button.disabled = true;
     var data = this.data;
-    var speedDone = data.speed_done && (!data.competitor || data.competitor.speed_done);
+    var speedDone = data.speed_done && !data.retrying && (!data.competitor || (data.competitor.speed_done && !data.competitor.retrying));
     // The PDF is made from the stored report: wait for a running speed test so the PDF has its result.
     var waits = !speedDone && !!this.speedRun;
-    if (waits) { this.say('Making the PDF once the speed test has finished...'); }
+    if (waits) { this.say('Making the PDF once the speed test has finished…'); }
+    var name = 'halo-audit.pdf';
     (waits ? this.speedRun : Promise.resolve()).then(function () {
       return send('GET', 'report/' + data.report_id + '/pdf', null, false);
     }).then(function (response) {
       if (!response.ok) { throw new Error('The PDF could not be made. Try again.'); }
+      name = fileName(response.headers.get('Content-Disposition'));
       return response.blob();
     }).then(function (blob) {
       var link = el('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'halo-audit.pdf'; // The same name the server sends in Content-Disposition.
+      link.download = name; // The name the server sends in Content-Disposition.
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
-      if (waits) { self.say(DONE); }
+      if (waits) { self.say(data.speed_failed || (data.competitor && data.competitor.speed_failed) ? SPEED_FAILED : DONE); }
     }).catch(function (error) { self.say(error.message, true); }).then(function () { button.disabled = false; });
   };
+
+  /*
+   * The server's file name ("halo-audit-<site>-<date>.pdf"), quoted or not, only in the shape the server builds;
+   * else the plain name. A name with a path, a quote or any other character is never used.
+   */
+  function fileName(disposition) {
+    var match = /(?:^|;)\s*filename\s*=\s*(?:"(halo-audit[a-z0-9.-]*\.pdf)"|(halo-audit[a-z0-9.-]*\.pdf))\s*(?:;|$)/i.exec(String(disposition || ''));
+    var name = match ? (match[1] || match[2]) : '';
+    return name && name.length <= 160 && name.indexOf('..') === -1 ? name : 'halo-audit.pdf';
+  }
 
   function boot() {
     if (!cfg.root) { return; }

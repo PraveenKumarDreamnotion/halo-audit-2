@@ -167,7 +167,10 @@ final class RestController
      * the browser asks for each page in its own call, so a failed call for one page never stops the other.
      * One PageSpeed run can take 90 seconds, so two in one request could pass the web server's time limit.
      * A call without side (a page cached with an older script) measures the first page that has no result.
-     * A page that already has its result is never measured again.
+     * A page that already has its result is never measured again. With retry=1, a page whose test ran and gave
+     * no result (Analyzer::speedFailed) is measured once more; any other page is answered from what is stored,
+     * so a retry after a timed-out call picks up a result that was saved meanwhile. One test per page runs at a
+     * time: a second call while one runs gets 409.
      */
     public function speed(\WP_REST_Request $request)
     {
@@ -186,22 +189,30 @@ final class RestController
         }
 
         $target = $side === 'mine' ? $report : $competitor;
-        if (empty($target['speed_done'])) {
-            if (!RateLimiter::allow('speed', self::clientIp(), 20, HOUR_IN_SECONDS)) {
-                return new \WP_Error('halo_rate', 'Too many speed tests. Try again later.', ['status' => 429]);
+        $retry = rest_sanitize_boolean($request->get_param('retry')) === true && self::speedEnabled() && Analyzer::speedFailed($target);
+        if (empty($target['speed_done']) || $retry) {
+            if (!self::speedLock($row['key'], $side)) {
+                return new \WP_Error('halo_speed_running', 'The speed test for this page is already running. Wait for it to finish.', ['status' => 409]);
             }
-            if (function_exists('set_time_limit')) {
-                @set_time_limit(120);
+            try {
+                if (!RateLimiter::allow('speed', self::clientIp(), 20, HOUR_IN_SECONDS)) {
+                    return new \WP_Error('halo_rate', 'Too many speed tests. Try again later.', ['status' => 429]);
+                }
+                if (function_exists('set_time_limit')) {
+                    @set_time_limit(120);
+                }
+                $psi = self::speedEnabled()
+                    ? (new PsiClient(Plugin::http(), (string) get_option('halo_audit_psi_key', '')))->run($target['url'])
+                    : null;
+                if ($side === 'mine') {
+                    $report = Analyzer::applySpeed($report, $psi);
+                } else {
+                    $report['competitor'] = Analyzer::applySpeed($competitor, $psi);
+                }
+                $this->store->updateSide($row['key'], $side, $report);
+            } finally {
+                self::speedUnlock($row['key'], $side);
             }
-            $psi = self::speedEnabled()
-                ? (new PsiClient(Plugin::http(), (string) get_option('halo_audit_psi_key', '')))->run($target['url'])
-                : null;
-            if ($side === 'mine') {
-                $report = Analyzer::applySpeed($report, $psi);
-            } else {
-                $report['competitor'] = Analyzer::applySpeed($competitor, $psi);
-            }
-            $this->store->updateSide($row['key'], $side, $report);
             // Answer with what is stored now: the other page may have been saved since this request read the row.
             $saved = $this->store->get($row['key']);
             if ($saved !== null) {
@@ -209,6 +220,42 @@ final class RestController
             }
         }
         return new \WP_REST_Response(ReportView::free($report) + ['report_id' => $row['key'], 'side' => $side, 'unlocked' => $this->gate->current() !== null]);
+    }
+
+    /** How long a speed lock holds when its request died without releasing it: longer than one PageSpeed run. */
+    private const SPEED_LOCK_SECONDS = 180;
+
+    /**
+     * Takes the lock for one page's speed test: a row in the options table under a unique name. INSERT IGNORE adds it
+     * only when no such row exists, so of two requests at once exactly one gets it (add_option() would not do: it
+     * writes with ON DUPLICATE KEY UPDATE, so both would). A lock older than SPEED_LOCK_SECONDS is from a request
+     * that died; a conditional UPDATE takes it over, again for one request only. The options cache is not used.
+     */
+    private static function speedLock(string $key, string $side): bool
+    {
+        global $wpdb;
+        $name = self::speedLockName($key, $side);
+        $now = time();
+        if ((int) $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $name, (string) $now)) === 1) {
+            return true;
+        }
+        return (int) $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d",
+            (string) $now, $name, $now - self::SPEED_LOCK_SECONDS
+        )) === 1;
+    }
+
+    private static function speedUnlock(string $key, string $side): void
+    {
+        global $wpdb;
+        $name = self::speedLockName($key, $side);
+        $wpdb->delete($wpdb->options, ['option_name' => $name]);
+        wp_cache_delete($name, 'options');
+    }
+
+    private static function speedLockName(string $key, string $side): string
+    {
+        return 'halo_audit_speed_lock_' . md5($key . '|' . $side);
     }
 
     public function gateSend(\WP_REST_Request $request)
@@ -292,7 +339,8 @@ final class RestController
 
         nocache_headers();
         header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . Pdf::FILENAME . '"');
+        // ASCII only, no quote, semicolon or line break (see Pdf::filename()).
+        header('Content-Disposition: attachment; filename="' . Pdf::filename($row['report']) . '"');
         header('Content-Length: ' . strlen($bytes));
         echo $bytes; // phpcs:ignore WordPress.Security.EscapeOutput -- binary PDF
         exit;

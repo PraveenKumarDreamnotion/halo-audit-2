@@ -67,12 +67,12 @@ final class RepoHygieneTest extends TestCase
     {
         $main = file_get_contents($this->root . '/seo-analyzer.php');
         $readme = file_get_contents($this->root . '/README.txt');
-        $this->assertStringContainsString('Version: 2.0.1', $main);
-        $this->assertStringContainsString("define('SEO_ANALYZER_VERSION', '2.0.1')", $main);
-        $this->assertStringContainsString('Stable tag: 2.0.1', $readme);
+        $this->assertStringContainsString('Version: 2.0.2', $main);
+        $this->assertStringContainsString("define('SEO_ANALYZER_VERSION', '2.0.2')", $main);
+        $this->assertStringContainsString('Stable tag: 2.0.2', $readme);
         $this->assertStringContainsString('Requires PHP: 8.0', $readme);
         $this->assertStringContainsString('Requires at least: 6.2', $readme);
-        $this->assertStringContainsString('## 2.0.1', file_get_contents($this->root . '/CHANGELOG.md'));
+        $this->assertStringContainsString('## 2.0.2', file_get_contents($this->root . '/CHANGELOG.md'));
     }
 
     public function test_uninstall_removes_every_table_and_option(): void

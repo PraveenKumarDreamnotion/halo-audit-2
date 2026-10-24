@@ -74,6 +74,22 @@ final class EducationTest extends TestCase
         ];
     }
 
+    /**
+     * The exact evidence as approved by the owner on 22 Oct 2026 (labels restored; docs/halo-audit/DESIGN.md defines
+     * them). An earlier follow-up asked for "Updated 11 days ago" instead: that wording is an open owner decision,
+     * so this pins the current text until it is made.
+     */
+    public function test_sitemap_freshness_keeps_the_status_labels_word_for_word(): void
+    {
+        foreach ([[11, 'ACTIVE: last update 11 days ago'], [1, 'ACTIVE: last update 1 day ago'], [40, 'MODERATE: last update 40 days ago'],
+                  [200, 'STALE: last update 200 days ago'], [400, 'DORMANT: last update 400 days ago']] as [$days, $evidence]) {
+            $site = ['sitemapStatus' => 200, 'sitemapValid' => true, 'sitemapNewest' => Make::NOW - $days * 86400];
+            $this->assertSame($evidence, (new Checks\SitemapFreshness())->run(Make::ctx(Make::page(), Make::site($site)))->evidence);
+        }
+        $site = ['sitemapStatus' => 200, 'sitemapValid' => true, 'sitemapNewest' => null];
+        $this->assertStringStartsWith('UNKNOWN:', (new Checks\SitemapFreshness())->run(Make::ctx(Make::page(), Make::site($site)))->evidence);
+    }
+
     public function test_every_extra_is_in_the_education_group_with_copy(): void
     {
         foreach ([Checks\ApplyLink::class, Checks\FeeVisible::class, Checks\EducationSchema::class, Checks\SitemapFreshness::class] as $class) {
