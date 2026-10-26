@@ -267,6 +267,33 @@ class Halo_Speed_Flow_Test extends WP_UnitTestCase
         $this->assertSame([true, 50], [$late['speed_done'], $late['summary']['groups']['speed']['score']]);
     }
 
+    /**
+     * The full report must never be kept by a page or edge cache: a copy saved before the speed test ended would be
+     * served again after it, and the browser would show Speed "Not measured" in place of the score it just got.
+     */
+    public function test_the_full_report_is_never_cacheable_and_keeps_the_speed_result_on_every_read(): void
+    {
+        $this->psi[self::MINE] = self::lighthouse(0.88, 2050, 0.02); // 79
+        $id = $this->call('POST', '/analyze', ['url' => self::MINE, 'keyword' => 'speed'])->get_data()['report_id'];
+        $_COOKIE[Gate::COOKIE] = Plugin::gate()->token('Asha', 'asha@example.com', time() + 60);
+
+        $early = $this->call('GET', '/report/' . $id);
+        $this->assertSame('no-store, max-age=0', $early->get_headers()['Cache-Control'] ?? null, 'Before the speed test.');
+
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
+        foreach ([1, 2, 3] as $read) {
+            // The browser adds a cache-buster (t) to each read; the route takes it and ignores it.
+            $late = $this->call('GET', '/report/' . $id, ['t' => '1761463800000.' . $read]);
+            $this->assertSame(200, $late->get_status(), 'Read ' . $read);
+            $this->assertSame('no-store, max-age=0', $late->get_headers()['Cache-Control'] ?? null, 'Read ' . $read);
+            $this->assertSame([true, false, 79], [$late->get_data()['speed_done'], $late->get_data()['speed_failed'], $late->get_data()['summary']['groups']['speed']['score']], 'Read ' . $read);
+        }
+        // A late or repeated speed call answers with the stored result and does not erase it.
+        $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine']);
+        $this->assertSame(79, $this->call('GET', '/report/' . $id)->get_data()['summary']['groups']['speed']['score']);
+        $this->assertSame(1, $this->psiCalls());
+    }
+
     public function test_a_repeated_or_late_speed_call_never_measures_again_or_changes_the_result(): void
     {
         $this->psi[self::MINE] = self::lighthouse(0.88, 2050, 0.02); // 79

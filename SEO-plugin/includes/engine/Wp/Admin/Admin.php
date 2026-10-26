@@ -17,6 +17,42 @@ final class Admin
         add_action('admin_post_' . self::EXPORT_ACTION, [self::class, 'export']);
         add_action('admin_post_' . Settings::CLEAR_ACTION, [Settings::class, 'clearSecret']);
         add_action('admin_notices', [self::class, 'printMailNotice']);
+        add_action('admin_notices', [self::class, 'printSchemaNotice']);
+    }
+
+    /**
+     * Shown when the last table install or check left something missing: what is missing, which statement failed
+     * and the database's own error, and what to do. Empty once a check finds the tables complete.
+     */
+    public static function schemaNotice(): string
+    {
+        $status = get_option(Installer::STATUS_OPTION, null);
+        if (!is_array($status) || !empty($status['ok'])) {
+            return '';
+        }
+        $items = '';
+        foreach ((array) ($status['failed'] ?? []) as $failed) {
+            $items .= '<li>Failed: ' . esc_html((string) ($failed['statement'] ?? '')) . ' (' . esc_html((string) ($failed['error'] ?? '')) . ')</li>';
+        }
+        foreach ((array) ($status['problems'] ?? []) as $problem) {
+            $items .= '<li>' . esc_html((string) $problem) . '</li>';
+        }
+        $action = ($status['mode'] ?? '') === 'check'
+            ? 'Back up the database, then deactivate and activate Halo Audit on the Plugins screen: activation adds what is missing and keeps every existing report.'
+            : 'Existing reports were not changed. Fix the cause (for example the database user\'s ALTER permission), then deactivate and activate Halo Audit again to retry.';
+        return '<div class="notice notice-error"><p><strong>Halo Audit\'s database tables are incomplete</strong> ('
+            . esc_html(wp_date(get_option('date_format') . ' ' . get_option('time_format'), (int) ($status['at'] ?? 0)))
+            . '). New audits cannot be saved, so the speed test and the email unlock fail. ' . esc_html($action) . '</p>'
+            . ($items !== '' ? '<ul style="list-style:disc;margin-left:2em">' . $items . '</ul>' : '') . '</div>';
+    }
+
+    /** On the Plugins screen too: that is where the admin is right after reactivating. */
+    public static function printSchemaNotice(): void
+    {
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if ($screen && ($screen->id === 'plugins' || strpos((string) $screen->id, 'seo-analyzer') !== false) && current_user_can(self::CAPABILITY)) {
+            echo self::schemaNotice(); // phpcs:ignore WordPress.Security.EscapeOutput -- escaped in schemaNotice()
+        }
     }
 
     /** Shown on this plugin's screens after a verification email could not be sent. A later successful send clears it. */

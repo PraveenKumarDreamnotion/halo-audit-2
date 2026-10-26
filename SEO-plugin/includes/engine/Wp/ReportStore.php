@@ -11,20 +11,28 @@ final class ReportStore
     /**
      * A comparison keeps the competitor's report in the competitor_* columns (part of the table since 1.x),
      * so the results column always holds one page's report.
+     *
+     * @return string|null The report's key, or null when the row was not written (a report that cannot be encoded,
+     *                     or an insert the database refused). A key is only handed out for a row that exists: every
+     *                     later call (speed, gate, full report, PDF) looks the report up by it and would answer 404.
      */
-    public function create(array $report): string
+    public function create(array $report): ?string
     {
         global $wpdb;
         $key = bin2hex(random_bytes(16));
-        $wpdb->insert(Installer::resultsTable(), [
+        $columns = self::columns($report);
+        if (!is_string($columns['results']) || (is_array($report['competitor'] ?? null) && !is_string($columns['competitor_results']))) {
+            return null;
+        }
+        $written = $wpdb->insert(Installer::resultsTable(), [
             'report_key' => $key,
             'url' => mb_substr($report['url'], 0, 255),
             'keyword' => mb_substr($report['keyword'], 0, 255),
             'engine_version' => $report['engine_version'],
             'is_education' => $report['is_education'] ? 1 : 0,
             'created_at' => gmdate('Y-m-d H:i:s'),
-        ] + self::columns($report));
-        return $key;
+        ] + $columns);
+        return $written === 1 ? $key : null;
     }
 
     /** @return array<string,mixed> The columns that change when a report changes. */

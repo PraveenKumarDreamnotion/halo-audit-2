@@ -154,6 +154,12 @@ final class RestController
         }
 
         $key = $this->store->create($report);
+        if ($key === null) {
+            // Without a stored row there is no report to test for speed, unlock or print: say so now, not as a
+            // "not found" on the speed test that follows. The tables are checked again on the next admin request.
+            Installer::markUnverified();
+            return new \WP_Error('halo_store', 'The audit ran but its report could not be saved. Try again later.', ['status' => 500]);
+        }
         $lead = $this->gate->current();
         if ($lead !== null) {
             $this->store->attachLead($key, $lead['name'], $lead['email']);
@@ -311,7 +317,11 @@ final class RestController
             $lead = $this->gate->current();
             $this->store->attachLead($row['key'], $lead['name'], $lead['email']);
         }
-        return new \WP_REST_Response(ReportView::full($row['report']) + ['report_id' => $row['key'], 'unlocked' => true]);
+        $response = new \WP_REST_Response(ReportView::full($row['report']) + ['report_id' => $row['key'], 'unlocked' => true]);
+        // Never kept by a page or edge cache: the report changes when a speed test ends (a cached copy from before
+        // would take the score away again), and it is one visitor's unlocked report.
+        $response->header('Cache-Control', 'no-store, max-age=0');
+        return $response;
     }
 
     public function pdf(\WP_REST_Request $request)

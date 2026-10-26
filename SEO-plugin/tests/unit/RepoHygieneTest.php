@@ -67,12 +67,13 @@ final class RepoHygieneTest extends TestCase
     {
         $main = file_get_contents($this->root . '/seo-analyzer.php');
         $readme = file_get_contents($this->root . '/README.txt');
-        $this->assertStringContainsString('Version: 2.0.2', $main);
-        $this->assertStringContainsString("define('SEO_ANALYZER_VERSION', '2.0.2')", $main);
-        $this->assertStringContainsString('Stable tag: 2.0.2', $readme);
+        $this->assertStringContainsString('Version: 2.0.3', $main);
+        $this->assertStringContainsString("define('SEO_ANALYZER_VERSION', '2.0.3')", $main);
+        $this->assertStringContainsString('Stable tag: 2.0.3', $readme);
         $this->assertStringContainsString('Requires PHP: 8.0', $readme);
         $this->assertStringContainsString('Requires at least: 6.2', $readme);
-        $this->assertStringContainsString('## 2.0.2', file_get_contents($this->root . '/CHANGELOG.md'));
+        $this->assertStringContainsString('## 2.0.3', file_get_contents($this->root . '/CHANGELOG.md'));
+        $this->assertStringContainsString('= 2.0.3 =', $readme);
     }
 
     public function test_uninstall_removes_every_table_and_option(): void
@@ -81,10 +82,10 @@ final class RepoHygieneTest extends TestCase
         // The data is kept when another active copy of the plugin still uses it.
         $this->assertStringContainsString('plugin_basename(SEO_ANALYZER_PLUGIN_FILE) !== WP_UNINSTALL_PLUGIN', $code);
         $this->assertLessThan(strpos($code, 'DROP TABLE'), strpos($code, 'WP_UNINSTALL_PLUGIN) {'));
-        foreach (['seo_analyzer_results', 'seo_analyzer_otp', 'seo_analyzer_api_keys'] as $table) {
+        foreach (['seo_analyzer_results', 'seo_analyzer_otp', 'seo_analyzer_otp_legacy', 'seo_analyzer_api_keys'] as $table) {
             $this->assertStringContainsString($table, $code, $table);
         }
-        foreach (['halo_audit_db_version', 'halo_audit_psi_key', 'halo_audit_scan_url', 'halo_audit_scan_secret', 'seo_analyzer_brevo_api_key', 'seo_analyzer_sender_email', 'seo_analyzer_openai_api_key', 'seo_analyzer_redirect_url', 'seo_analyzer_pagespeed_api_key'] as $option) {
+        foreach (['halo_audit_db_version', 'halo_audit_schema', 'halo_audit_schema_lock','halo_audit_psi_key', 'halo_audit_scan_url', 'halo_audit_scan_secret', 'seo_analyzer_brevo_api_key', 'seo_analyzer_sender_email', 'seo_analyzer_openai_api_key', 'seo_analyzer_redirect_url', 'seo_analyzer_pagespeed_api_key'] as $option) {
             $this->assertStringContainsString($option, $code, $option);
         }
         $this->assertStringContainsString('halo_audit_purge', $code);

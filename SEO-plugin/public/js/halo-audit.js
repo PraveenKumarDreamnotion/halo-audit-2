@@ -61,6 +61,7 @@
         if (!response.ok) {
           var error = new Error(data.message || 'Something went wrong. Try again.');
           error.status = response.status;
+          error.code = data.code || '';
           throw error;
         }
         return data;
@@ -189,8 +190,9 @@
           side(name).speed_done = true;
           side(name).speed_failed = !!fresh.speed_failed;
         }
-      }).catch(function () {
+      }).catch(function (error) {
         if (self.data !== data) { return; }
+        if (self.speedGone(data, error)) { return; }
         // No answer for this page (a timeout, an error): Speed is not measured and the page offers a retry. The
         // server may still save a result; a retry then answers with it instead of testing again.
         side(name).speed_done = true;
@@ -214,7 +216,25 @@
     if (this.status.textContent === SPEED_PENDING || this.status.textContent === DONE || this.status.textContent === SPEED_FAILED) {
       this.say(failed ? SPEED_FAILED : DONE);
     }
-    if (data.checks || data.unlocked) { this.loadFull(); }
+    if ((data.checks || data.unlocked) && !data.speed_gone) { this.loadFull(); }
+  };
+
+  /*
+   * A 404 from the speed route is final: the report is no longer stored ("This report was not found") or the site
+   * does not answer the route at all. A retry would get the same 404, so every page still waiting is marked "No
+   * result" without a retry button and the status line says why. Returns false for any other error.
+   */
+  Widget.prototype.speedGone = function (data, error) {
+    if (!error || error.status !== 404) { return false; }
+    data.speed_gone = true;
+    [data, data.competitor].forEach(function (side) {
+      if (side && (!side.speed_done || side.speed_failed)) {
+        side.speed_done = true;
+        side.speed_failed = true;
+      }
+    });
+    this.say(error.code === 'halo_not_found' ? error.message : 'The speed test is not available on this site right now.', true);
+    return true;
   };
 
   /*
@@ -242,12 +262,14 @@
       self.say(failed ? SPEED_FAILED : DONE);
     }).catch(function (error) {
       if (self.data !== data) { return; }
+      if (self.speedGone(data, error)) { return; }
       self.say(error.status === 409 ? error.message : 'The speed test did not return a result. ' + error.message, true);
     }).then(function () {
       if (self.data !== data) { return; }
       side().retrying = false;
       self.renderSummary();
-      if (data.checks || data.unlocked) { self.loadFull(); }
+      if (data.checks) { self.renderFindings(); }
+      if ((data.checks || data.unlocked) && !data.speed_gone) { self.loadFull(); }
     });
     return this.speedRun;
   };
@@ -323,7 +345,7 @@
       if (!pending && !failed && group.score !== null) { item.appendChild(bar(group.score)); }
       item.appendChild(el('span', 'halo-audit__group-counts',
         pending ? 'Takes up to 90 seconds.' : (failed ? 'The speed test did not return a result.' : counts(group))));
-      if (failed) { item.appendChild(self.retryButton('mine')); }
+      if (failed && !data.speed_gone) { item.appendChild(self.retryButton('mine')); }
       list.appendChild(item);
     });
     this.summaryBox.appendChild(list);
@@ -433,7 +455,7 @@
     [['mine', data, 'your page', 'Try again for your page'], ['competitor', them, 'the competitor page', 'Try again for the competitor page']].forEach(function (side) {
       if (!side[1].speed_failed || side[1].retrying) { return; }
       var note = el('p', 'halo-audit__note halo-audit__speed-failed', 'The speed test for ' + side[2] + ' did not return a result, so its Speed is not measured. ');
-      note.appendChild(self.retryButton(side[0], side[3]));
+      if (!data.speed_gone) { note.appendChild(self.retryButton(side[0], side[3])); }
       box.appendChild(note);
     });
 
@@ -567,41 +589,92 @@
   };
 
   /*
-   * Responses can arrive out of order: a full report fetched before a speed test finished can land after it.
-   * isBehind() spots a full report that knows less about speed than the page already shows.
+   * How far one page's speed test has got: 0 still running, 1 ran without a result, 2 measured. It only moves
+   * forward, so a stored result (2) wins over a call that timed out in the browser (1).
+   */
+  function speedRank(side) {
+    if (!side || !side.speed_done) { return 0; }
+    return side.speed_failed ? 1 : 2;
+  }
+
+  /*
+   * Responses can arrive out of order: a full report fetched before a speed test finished can land after it, and
+   * a cache in front of the site can keep answering with that older copy. isBehind() spots a full report that
+   * knows less about the speed of either page than the page already shows.
    */
   Widget.prototype.isBehind = function (full) {
     var data = this.data;
-    return !!((data.speed_done && !full.speed_done) ||
-      (data.competitor && data.competitor.speed_done && full.competitor && !full.competitor.speed_done));
+    return speedRank(full) < speedRank(data) ||
+      !!(data.competitor && full.competitor && speedRank(full.competitor) < speedRank(data.competitor));
   };
 
-  /* Takes the findings and scores of a full report. A page's speed state only moves forward. */
+  /* The speed rows of fresh replaced by those of old (same check ID), for a page whose speed old knows better. */
+  function keepSpeedRows(fresh, old) {
+    if (!Array.isArray(fresh) || !Array.isArray(old)) { return fresh; }
+    var kept = {};
+    old.forEach(function (row) { if (row && row.group === 'speed') { kept[row.id] = row; } });
+    return fresh.map(function (row) { return row && row.group === 'speed' && kept[row.id] ? kept[row.id] : row; });
+  }
+
+  /* The same for the comparison pairs: one page's side of each speed pair, from the rows that were kept. */
+  function keepSpeedPairs(pairs, mine, theirs) {
+    if (!Array.isArray(pairs) || (!mine && !theirs)) { return pairs; }
+    function byId(rows) {
+      var map = {};
+      (rows || []).forEach(function (row) { if (row && row.group === 'speed') { map[row.id] = row; } });
+      return map;
+    }
+    var m = byId(mine);
+    var t = byId(theirs);
+    return pairs.map(function (pair) {
+      if (!pair || pair.group !== 'speed') { return pair; }
+      var copy = { id: pair.id, group: pair.group, title: pair.title, why: pair.why, mine: pair.mine, theirs: pair.theirs };
+      if (m[pair.id]) { copy.mine = { status: m[pair.id].status, evidence: m[pair.id].evidence, message: m[pair.id].message }; }
+      if (t[pair.id]) { copy.theirs = { status: t[pair.id].status, evidence: t[pair.id].evidence }; }
+      return copy;
+    });
+  }
+
+  /*
+   * Takes the findings and scores of a full report. A page's speed only moves forward: when the report knows less
+   * about a page's speed than the page shows (a speed result already arrived), that page keeps its score, its speed
+   * state and its speed rows, and takes everything else from the report.
+   */
   Widget.prototype.applyFull = function (full) {
     var data = this.data;
-    var mineDone = !!data.speed_done;
-    var theirsDone = !!(data.competitor && data.competitor.speed_done);
-    data.checks = full.checks;
-    data.pairs = full.pairs || null;
-    data.summary = full.summary;
-    var mineFailed = !!data.speed_failed;
-    var theirsFailed = !!(data.competitor && data.competitor.speed_failed);
-    var theirsRetrying = !!(data.competitor && data.competitor.retrying);
-    data.speed_done = mineDone || !!full.speed_done;
-    // A stored result wins over a failure seen in the browser (a call that timed out after the server saved it).
-    data.speed_failed = full.speed_done ? !!full.speed_failed : mineFailed;
-    if (full.competitor) {
-      data.competitor = full.competitor;
-      data.competitor.speed_done = theirsDone || !!full.competitor.speed_done;
-      data.competitor.speed_failed = full.competitor.speed_done ? !!full.competitor.speed_failed : theirsFailed;
-      data.competitor.retrying = theirsRetrying;
+    var keepMine = speedRank(full) < speedRank(data);
+    var old = data.competitor;
+    var keepTheirs = !!(old && full.competitor && speedRank(full.competitor) < speedRank(old));
+    data.checks = keepMine ? keepSpeedRows(full.checks, data.checks) : full.checks;
+    if (!keepMine) {
+      data.summary = full.summary;
+      data.speed_done = !!full.speed_done;
+      data.speed_failed = !!full.speed_failed;
     }
+    if (full.competitor) {
+      var next = full.competitor;
+      if (keepTheirs) {
+        next.summary = old.summary;
+        next.speed_done = !!old.speed_done;
+        next.speed_failed = !!old.speed_failed;
+        next.checks = keepSpeedRows(next.checks, old.checks);
+      } else {
+        next.speed_done = !!next.speed_done;
+        next.speed_failed = !!next.speed_failed;
+      }
+      next.retrying = !!(old && old.retrying);
+      data.competitor = next;
+    }
+    data.pairs = keepSpeedPairs(full.pairs || null, keepMine ? data.checks : null, keepTheirs ? data.competitor.checks : null);
   };
+
+  // Each full report is asked for at its own address, so a page or edge cache cannot answer with an older copy.
+  var fetches = 0;
 
   Widget.prototype.loadFull = function (retried) {
     var self = this;
     var data = this.data;
-    api('GET', 'report/' + data.report_id).then(function (full) {
+    api('GET', 'report/' + data.report_id + '?t=' + Date.now() + '.' + (++fetches)).then(function (full) {
       if (self.data !== data) { return; }
       // The stored report is newer than this answer by now (the speed result is saved before it is sent).
       if (self.isBehind(full) && !retried) { self.loadFull(true); return; }

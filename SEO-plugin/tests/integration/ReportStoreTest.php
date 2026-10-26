@@ -42,6 +42,32 @@ class Halo_Report_Store_Test extends WP_UnitTestCase
         $this->assertNull($row['lead_verified_at']);
     }
 
+    /** No key without a row: a key for a row that was never written makes every later lookup (speed, gate, PDF) a 404. */
+    public function test_create_gives_no_key_when_the_row_is_not_written(): void
+    {
+        global $wpdb;
+        $store = new ReportStore();
+        $count = static fn(): int => (int) $wpdb->get_var('SELECT COUNT(*) FROM ' . Installer::resultsTable());
+        $before = $count();
+
+        $table = Installer::resultsTable();
+        $refuse = static fn(string $query): string => stripos($query, "INSERT INTO `$table`") === 0 ? '' : $query;
+        add_filter('query', $refuse);
+        $refused = $store->create($this->report());
+        remove_filter('query', $refuse);
+        $this->assertNull($refused, 'Insert refused by the database.');
+
+        $unencodable = $this->report();
+        $unencodable['checks'][0]['score'] = NAN; // json_encode() fails on NAN and INF.
+        $this->assertNull($store->create($unencodable), 'Report that cannot be encoded.');
+
+        $rival = $this->report();
+        $rival['checks'][0]['score'] = INF;
+        $this->assertNull($store->create($this->report() + ['competitor' => $rival]), 'Competitor report that cannot be encoded.');
+
+        $this->assertSame($before, $count());
+    }
+
     public function test_get_rejects_bad_and_unknown_keys(): void
     {
         $store = new ReportStore();

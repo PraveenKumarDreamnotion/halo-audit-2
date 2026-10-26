@@ -1,6 +1,7 @@
 <?php
 use HaloAudit\CertProbe;
 use HaloAudit\Wp\Gate;
+use HaloAudit\Wp\Installer;
 use HaloAudit\Wp\Plugin;
 use HaloAudit\Wp\RestController;
 
@@ -201,6 +202,106 @@ class Halo_Rest_Test extends WP_UnitTestCase
     public function test_unknown_report_is_404(): void
     {
         $this->assertSame(404, $this->call('POST', '/speed', ['report_id' => str_repeat('a', 32)])->get_status());
+    }
+
+    /** The browser posts to halo-audit/v1/speed: the route exists on every request, takes POST only, and needs no setting. */
+    public function test_speed_route_is_registered_for_post_without_a_key(): void
+    {
+        delete_option('halo_audit_psi_key');
+        $routes = rest_get_server()->get_routes(RestController::NS);
+        $this->assertArrayHasKey('/' . RestController::NS . '/speed', $routes);
+        $methods = [];
+        foreach ($routes['/' . RestController::NS . '/speed'] as $handler) {
+            $methods += $handler['methods'];
+        }
+        $this->assertSame(['POST' => true], $methods);
+    }
+
+    /**
+     * The three 404s and 403s the browser can get from /speed, told apart by their code: a wrong method is WordPress'
+     * own rest_no_route (404, not 405), a stale nonce is 403, and a report that is not stored is halo_not_found.
+     */
+    public function test_speed_errors_carry_codes_that_tell_their_cause_apart(): void
+    {
+        $id = $this->analyze()['report_id'];
+
+        $get = $this->call('GET', '/speed', ['report_id' => $id]);
+        $this->assertSame([404, 'rest_no_route'], [$get->get_status(), $get->get_data()['code']]);
+
+        $unsigned = $this->call('POST', '/speed', ['report_id' => $id], false);
+        $this->assertSame([403, 'halo_nonce'], [$unsigned->get_status(), $unsigned->get_data()['code']]);
+
+        $unknown = $this->call('POST', '/speed', ['report_id' => str_repeat('b', 32)]);
+        $this->assertSame([404, 'halo_not_found'], [$unknown->get_status(), $unknown->get_data()['code']]);
+        $this->assertSame('This report was not found. Run the audit again.', $unknown->get_data()['message']);
+
+        $malformed = $this->call('POST', '/speed', ['report_id' => 'not-a-key']);
+        $this->assertSame([404, 'halo_not_found'], [$malformed->get_status(), $malformed->get_data()['code']]);
+    }
+
+    /**
+     * A report the database refused to store must not come back with a report_id: every later call looks the report
+     * up by it, so the speed test would answer "not found" (404) while the page still showed the free results.
+     */
+    public function test_a_report_that_is_not_saved_is_an_error_at_analyze_not_a_404_at_speed(): void
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'seo_analyzer_results';
+        $before = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+        $refuse = static fn(string $query): string => stripos($query, "INSERT INTO `$table`") === 0 ? '' : $query;
+        add_filter('query', $refuse);
+        $suppress = $wpdb->suppress_errors(true);
+        $response = $this->call('POST', '/analyze', ['url' => 'example.com/page', 'keyword' => 'mba']);
+        $wpdb->suppress_errors($suppress);
+        remove_filter('query', $refuse);
+
+        $this->assertSame([500, 'halo_store'], [$response->get_status(), $response->get_data()['code']]);
+        $this->assertArrayNotHasKey('report_id', $response->get_data());
+        $this->assertSame($before, (int) $wpdb->get_var("SELECT COUNT(*) FROM $table"));
+
+        // Once the database takes the row again, the same request works and its report can be speed-tested.
+        update_option('halo_audit_psi_key', 'KEY');
+        $id = $this->analyze()['report_id'];
+        $this->assertSame(200, $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine'])->get_status());
+    }
+
+    /**
+     * A database copied in parts can hold the 1.x results table (no report_key, grade, engine_version, ...) while
+     * halo_audit_db_version already says 2, so Installer::maybeUpgrade() never runs. Every insert then fails with
+     * "Unknown column". Before 2.0.3's fix /analyze still showed the results with a report_id, and /speed and its
+     * retry answered 404 halo_not_found. Now /analyze says the report could not be saved, and an upgrade repairs it.
+     */
+    public function test_a_1x_table_behind_a_current_db_version_fails_at_analyze_and_the_upgrade_repairs_it(): void
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'seo_analyzer_results';
+        $this->assertSame('2', get_option('halo_audit_db_version'));
+        // The 1.x shape. ALTER commits on its own, so the finally block always runs the upgrade that restores it.
+        $wpdb->query("DELETE FROM $table WHERE name IS NULL OR email IS NULL");
+        $wpdb->query("ALTER TABLE $table DROP INDEX report_key, DROP COLUMN report_key, DROP COLUMN grade, DROP COLUMN engine_version,"
+            . ' DROP COLUMN is_education, DROP COLUMN lead_verified_at, DROP COLUMN scan_id,'
+            . ' MODIFY name varchar(100) NOT NULL, MODIFY email varchar(100) NOT NULL');
+        try {
+            $this->assertNotContains('report_key', $wpdb->get_col("SHOW COLUMNS FROM $table"));
+            global $EZSQL_ERROR;
+            $EZSQL_ERROR = [];
+            update_option(Installer::STATUS_OPTION, ['version' => Installer::DB_VERSION, 'at' => time(), 'ok' => true, 'mode' => 'install', 'problems' => [], 'warnings' => [], 'failed' => []]);
+            $suppress = $wpdb->suppress_errors(true);
+            $response = $this->call('POST', '/analyze', ['url' => 'example.com/page', 'keyword' => 'mba']);
+            $wpdb->suppress_errors($suppress);
+            // wpdb keeps every error in $EZSQL_ERROR, also while suppressed; last_error is reset by later queries.
+            $this->assertStringContainsString('Unknown column', implode(' ', array_column((array) $EZSQL_ERROR, 'error_str')));
+            $this->assertSame([500, 'halo_store'], [$response->get_status(), $response->get_data()['code']]);
+            $this->assertArrayNotHasKey('report_id', $response->get_data());
+            $this->assertFalse(Installer::verified(), 'A failed save makes the next admin request check the tables again.');
+        } finally {
+            delete_option('halo_audit_db_version');
+            Installer::maybeUpgrade();
+        }
+        $this->assertContains('report_key', $wpdb->get_col("SHOW COLUMNS FROM $table"));
+        update_option('halo_audit_psi_key', 'KEY');
+        $id = $this->analyze()['report_id'];
+        $this->assertSame(200, $this->call('POST', '/speed', ['report_id' => $id, 'side' => 'mine'])->get_status());
     }
 
     public function test_scan_slot_says_not_available(): void

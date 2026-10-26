@@ -140,6 +140,6 @@ class Halo_Adapters_Test extends WP_UnitTestCase
         foreach (['perform_seo_analysis', 'fetch_page_title', 'send_otp', 'verify_otp_and_save_data', 'download_pdf_report', 'test_wp_mail'] as $action) {
             $this->assertFalse(has_action('wp_ajax_nopriv_' . $action), $action);
         }
-        $this->assertSame('2.0.2', SEO_ANALYZER_VERSION);
+        $this->assertSame('2.0.3', SEO_ANALYZER_VERSION);
     }
 }
