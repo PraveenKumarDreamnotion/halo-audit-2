@@ -392,8 +392,21 @@ REST routes have explicit permission callbacks and are easy to test.
 
 ## 5. Data
 
-`wp_seo_analyzer_results` gains columns through one versioned `dbDelta`
-migration. Old rows stay readable in the admin list.
+`wp_seo_analyzer_results` gains columns through the installer
+(`Installer`). A new table is made with `dbDelta`; an existing one only
+gains what is missing: columns, indexes (after looking for an equivalent
+one on the same columns), nullable `name`/`email`, `keyword` widened to 255.
+Nothing is dropped. Old rows stay readable in the admin list.
+
+The installer does not trust `halo_audit_db_version` alone. Up to 2.0.2 it
+wrote 2 even when its changes failed, and the option can arrive in a partial
+database copy, so a live site kept the 1.x table and every insert failed.
+Activation always checks the real tables and repairs them; the version is
+written only after a check finds nothing missing. The last result (problems,
+warnings, failed statements with the database error) is in option
+`halo_audit_schema` and shown as an admin notice, also on the Plugins screen.
+A visitor's request never alters a site whose version is current; an admin
+request checks it read-only and asks for a reactivation.
 
 | Column | Use |
 |---|---|
@@ -409,10 +422,12 @@ gate is passed. Reports with no verified lead are deleted after 7 days by a
 daily WP-Cron event.
 
 `wp_seo_analyzer_otp` stores a hash of the code (not the code), the expiry and
-an attempt count.
+an attempt count. A 1.x table of that name (plain-text codes) is renamed to
+`wp_seo_analyzer_otp_legacy`, not dropped.
 
 The PageSpeed key moves from the custom table `wp_seo_analyzer_api_keys` to an
-option. The migration copies the value, then drops the table.
+option. The migration copies the value, then drops the table once the option
+holds a key.
 
 New options: scan server URL, scan server secret (both empty in part 1).
 
@@ -498,4 +513,6 @@ trusted.
   6.2` are added to the header.
 - 2.0.1 (hardening, 2026-10-15) changes scoring, so `engine_version` is 2.0.1.
   Required PHP extensions: `curl`, `dom`, `mbstring`, `openssl`, `gd`.
+- From 2.0.3 `engine_version` follows the plugin version (2.0.2 still wrote
+  2.0.1).
 - Praveen deploys to staging. The acceptance run happens there.

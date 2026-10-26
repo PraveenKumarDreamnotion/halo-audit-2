@@ -11,12 +11,14 @@ if (defined('SEO_ANALYZER_PLUGIN_FILE') && plugin_basename(SEO_ANALYZER_PLUGIN_F
 
 global $wpdb;
 
-foreach (['seo_analyzer_results', 'seo_analyzer_otp', 'seo_analyzer_api_keys'] as $table) {
+foreach (['seo_analyzer_results', 'seo_analyzer_otp', 'seo_analyzer_otp_legacy', 'seo_analyzer_api_keys'] as $table) {
     $wpdb->query('DROP TABLE IF EXISTS ' . $wpdb->prefix . $table);
 }
 
 foreach ([
     'halo_audit_db_version',
+    'halo_audit_schema',
+    'halo_audit_schema_lock',
     'halo_audit_psi_key',
     'halo_audit_scan_url',
     'halo_audit_scan_secret',

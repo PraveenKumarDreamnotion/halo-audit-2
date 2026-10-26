@@ -3,7 +3,7 @@ Contributors: thrivemattic
 Tags: seo, audit, ai, performance
 Requires at least: 6.2
 Tested up to: 7.1
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -47,6 +47,8 @@ If the upload is refused because the file is too large (the ZIP is about 7 MB), 
 Updating a site that already runs this plugin: replace the files in the folder the plugin is already in. Do not upload the ZIP as a second plugin. If two copies are active, only the first one loads.
 
 Coming from version 1.x: never delete the 1.x copy from the Plugins screen. Deleting it drops the table that holds your reports and leads. Replace its files instead, and export the leads first to be safe.
+
+Database tables: activating the plugin checks its tables (`{prefix}seo_analyzer_results`, `{prefix}seo_analyzer_otp`) against the columns and indexes this version needs and adds whatever is missing. It never drops a table, column, index or row, so the site's own database stays in place: there is no need to copy a database from another site. After replacing the files on a site that ran an older version, back up the database, then deactivate and activate the plugin once. If something could not be added, a notice on the Plugins screen names it and the database's error, nothing is marked as upgraded, and the next activation tries again.
 
 == Settings ==
 
@@ -122,6 +124,7 @@ A theme can follow the tool's state. The root element carries `data-state` (`idl
 * Speed always says "Not measured": add a PageSpeed key, or check that the key is valid.
 * "We could not send the code": the site cannot send email. Check the Brevo key and sender, or the site's mail setup.
 * "Your session has expired": a firewall or cache is blocking `/wp-json/halo-audit/v1/`. Do not cache that path.
+* "The audit ran but its report could not be saved", or the speed test says "This report was not found": the plugin's tables are incomplete (for example still the 1.x results table). Back up the database, then deactivate and activate the plugin. To check by hand: `SHOW CREATE TABLE {prefix}seo_analyzer_results;` must list `report_key` with a UNIQUE key, and `grade`, `engine_version`, `is_education`, `lead_verified_at`, `scan_id`.
 * The tool looks unstyled after an update: clear the cache of your optimisation plugin, including its minified CSS and JavaScript.
 * With "Remove Unused CSS" in an optimisation plugin, add `halo-audit` to its safelist. Most of the report is drawn in the browser after the page loads.
 
@@ -140,6 +143,9 @@ The PDF downloads as `halo-audit-<site>-<YYYY-MM-DD>.pdf`, or `halo-audit-<site>
 Hindi in a bold heading or check name is set in regular weight: mPDF 8.3 misplaces the anusvara in FreeSans Bold. Hindi copied or searched in the PDF comes out in display order (a vowel sign before its letter), a known mPDF limit for shaped scripts; it reads correctly on the page. Other scripts with no bundled font (Chinese, Japanese, Korean, Tamil, Telugu, Bengali, Gujarati and others) print as empty boxes.
 
 == Upgrade Notice ==
+
+= 2.0.3 =
+Fixes "This report was not found" on the speed test when the plugin's tables were never fully upgraded. After replacing the files, back up the database, then deactivate and activate the plugin once: activation checks and repairs its tables and keeps every existing report. Clear your optimisation plugin's minified JavaScript after updating.
 
 = 2.0.2 =
 The PDF has a new look (Lato and Oswald, a charcoal cover) and downloads with the site and date in its name. Every PDF carries the Thrivemattic logo, author, footer credit and the closing call to action ("Book a Discovery Call", https://thrivemattic.com/contact/); the `halo_audit_pdf_brand` filter can change or switch them off. The competitor comparison is back (`comparison="true"`). Clear your optimisation plugin's minified CSS and JavaScript after updating.

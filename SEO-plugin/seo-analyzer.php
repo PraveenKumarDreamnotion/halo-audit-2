@@ -3,7 +3,7 @@
  * Plugin Name: SEO Analyzer
  * Plugin URI: https://thrivemattic.com/ai-tools/seo-analysis/
  * Description: Halo Audit. Scores one page for on-page SEO, technical health, AI readiness and speed.
- * Version: 2.0.2
+ * Version: 2.0.3
  * Requires at least: 6.2
  * Requires PHP: 8.0
  * Author: thrivemattic
@@ -20,7 +20,7 @@ if (defined('SEO_ANALYZER_VERSION')) {
     return;
 }
 
-define('SEO_ANALYZER_VERSION', '2.0.2');
+define('SEO_ANALYZER_VERSION', '2.0.3');
 define('SEO_ANALYZER_PLUGIN_FILE', __FILE__);
 define('SEO_ANALYZER_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_ANALYZER_PLUGIN_URL', plugin_dir_url(__FILE__));

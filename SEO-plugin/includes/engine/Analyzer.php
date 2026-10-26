@@ -3,7 +3,7 @@ namespace HaloAudit;
 
 final class Analyzer
 {
-    public const VERSION = '2.0.1';
+    public const VERSION = '2.0.3';
     private const SIDE_FILE_BUDGET_SECONDS = 10;
     /** Evidence of a speed check whose PageSpeed test has not finished: not a failed test. */
     public const SPEED_PENDING = 'The speed test had not finished yet';

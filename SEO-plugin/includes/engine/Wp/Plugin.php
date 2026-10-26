@@ -19,6 +19,8 @@ final class Plugin
         add_action(Installer::CRON_HOOK, static function (): void {
             self::store()->purgeUnverified();
         });
+        // Activation checks the real tables and repairs them, whatever halo_audit_db_version says.
+        register_activation_hook(SEO_ANALYZER_PLUGIN_FILE, [Installer::class, 'activate']);
         register_deactivation_hook(SEO_ANALYZER_PLUGIN_FILE, static function (): void {
             wp_clear_scheduled_hook(Installer::CRON_HOOK);
         });
