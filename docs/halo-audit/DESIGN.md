@@ -513,4 +513,6 @@ trusted.
   6.2` are added to the header.
 - 2.0.1 (hardening, 2026-10-15) changes scoring, so `engine_version` is 2.0.1.
   Required PHP extensions: `curl`, `dom`, `mbstring`, `openssl`, `gd`.
+- From 2.0.3 `engine_version` follows the plugin version (2.0.2 still wrote
+  2.0.1).
 - Praveen deploys to staging. The acceptance run happens there.

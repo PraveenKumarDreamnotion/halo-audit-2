@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - For a visitor who had already confirmed their email, Speed (mobile) showed its score for a moment and then went back to "Not measured" / "No result". When the speed test ended, the browser loaded the full report again. That request had no cache headers and no unique address, so a page or edge cache could answer with the copy saved before the test, and the browser then took that copy's empty Speed score. Now `GET /report/{id}` sends `Cache-Control: no-store, max-age=0`, and the browser asks for each full report at its own address (`?t=`). This also stops a cache from keeping one visitor's unlocked report.
 - A page's speed result in the browser only moves forward: still running, then ran without a result, then measured. A full report that knows less about a page's speed keeps that page's score, speed state and speed rows, and every other finding still comes from the report. This holds for each page of a comparison. It also fixes two other cases: a successful "Try the speed test again" undone by an older "failed" copy, and a comparison where only the competitor's copy was older. A stored result still wins over a call that timed out in the browser. Scores, checks and the report format are unchanged.
 
+### Changed
+- `Analyzer::VERSION` is 2.0.3, so new reports carry `engine_version` 2.0.3 (in the stored report and the results table). 2.0.2 left it at 2.0.1. Reports already saved keep the version they were made with.
+
 ## 2.0.2
 
 24 Oct 2026, merged into halo-audit-2 as pull request #4. It holds every change since 2.0.1.

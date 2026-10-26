@@ -41,7 +41,7 @@ final class AnalyzerTest extends TestCase
         $out = $this->analyzer->analyze('example.com/courses/mba/', 'MBA');
         $this->assertTrue($out['ok']);
         $report = $out['report'];
-        $this->assertSame('2.0.1', $report['engine_version']);
+        $this->assertSame('2.0.3', $report['engine_version']);
         $this->assertSame('https://example.com/courses/mba/', $report['url']);
         $this->assertSame('MBA', $report['keyword']);
         $this->assertSame(Make::NOW, $report['created_at']);
